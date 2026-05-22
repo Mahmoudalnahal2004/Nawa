@@ -1,4 +1,5 @@
 from pydantic import BaseModel, EmailStr
+from typing import Optional
 
 
 class LoginRequest(BaseModel):
@@ -28,6 +29,10 @@ class UserResponse(BaseModel):
     full_name: str
     role: str
     is_active: bool
+    university: Optional[str] = None
+    study_year: Optional[int] = None
+    current_streak: int = 0
+    is_anonymous: bool = False
 
     class Config:
         from_attributes = True

@@ -5,7 +5,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { isAuthenticated, getStoredUser, clearAuth } from '@/lib/auth';
 import {
   LayoutDashboard, FileQuestion, FolderTree, Users, LogOut,
-  Menu, X, Stethoscope, ChevronRight,
+  Menu, X, Stethoscope, ChevronRight, Settings,
 } from 'lucide-react';
 
 const navItems = [
@@ -13,6 +13,7 @@ const navItems = [
   { href: '/admin/questions', icon: FileQuestion, label: 'Questions' },
   { href: '/admin/categories', icon: FolderTree, label: 'Categories' },
   { href: '/admin/users', icon: Users, label: 'Students' },
+  { href: '/admin/settings', icon: Settings, label: 'Settings' },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

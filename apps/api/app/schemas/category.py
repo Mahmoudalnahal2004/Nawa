@@ -8,6 +8,8 @@ class CategoryCreate(BaseModel):
     description: Optional[str] = ""
     icon: Optional[str] = "📚"
     parent_id: Optional[int] = None
+    target_year: Optional[int] = None
+    university: Optional[str] = None
 
 
 class CategoryUpdate(BaseModel):
@@ -15,6 +17,8 @@ class CategoryUpdate(BaseModel):
     description: Optional[str] = None
     icon: Optional[str] = None
     parent_id: Optional[int] = None
+    target_year: Optional[int] = None
+    university: Optional[str] = None
 
 
 class CategoryResponse(BaseModel):
@@ -23,6 +27,8 @@ class CategoryResponse(BaseModel):
     description: str
     icon: str
     parent_id: Optional[int]
+    target_year: Optional[int] = None
+    university: Optional[str] = None
     created_at: datetime
     question_count: Optional[int] = 0
 

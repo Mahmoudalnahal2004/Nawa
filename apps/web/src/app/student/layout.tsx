@@ -4,12 +4,15 @@ import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { isAuthenticated, getStoredUser, clearAuth } from '@/lib/auth';
 import {
-  LayoutDashboard, AlertTriangle, LogOut, Menu, X, Stethoscope, ChevronRight, BookOpen,
+  LayoutDashboard, AlertTriangle, LogOut, Menu, X, Stethoscope, ChevronRight, BookOpen, UserCircle2, History, Trophy, Flame
 } from 'lucide-react';
 
 const navItems = [
-  { href: '/student/dashboard', icon: LayoutDashboard, label: 'Modules' },
+  { href: '/student/dashboard', icon: LayoutDashboard, label: 'Create Quiz' },
   { href: '/student/weak-points', icon: AlertTriangle, label: 'Weak Points' },
+  { href: '/student/history', icon: History, label: 'History & Analytics' },
+  { href: '/student/leaderboard', icon: Trophy, label: 'Leaderboard' },
+  { href: '/student/profile', icon: UserCircle2, label: 'My Profile' },
 ];
 
 export default function StudentLayout({ children }: { children: React.ReactNode }) {
@@ -17,12 +20,19 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [user, setUser] = useState<any>(null);
+  const [streak, setStreak] = useState(0);
 
   useEffect(() => {
     if (!isAuthenticated()) { router.push('/login'); return; }
     const u = getStoredUser();
     if (u?.role !== 'student') { router.push('/admin/dashboard'); return; }
     setUser(u);
+    // Fetch streak from backend
+    import('@/lib/api').then(mod => {
+      mod.default.get('/users/me').then((res: any) => {
+        setStreak(res.data.current_streak || 0);
+      }).catch(() => {});
+    });
   }, [router]);
 
   const handleLogout = () => { clearAuth(); router.push('/login'); };
@@ -32,7 +42,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
   return (
     <div className="min-h-screen bg-navy-950 flex">
       {/* Sidebar */}
-      <aside className={`fixed lg:static inset-y-0 left-0 z-50 w-72 bg-navy-900/80 backdrop-blur-xl border-r border-white/5
+      <aside className={`fixed inset-y-0 left-0 z-50 w-72 h-screen bg-navy-900/80 backdrop-blur-xl border-r border-white/5
         transform transition-transform duration-300 ease-out
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
         <div className="flex flex-col h-full">
@@ -82,7 +92,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
 
       {sidebarOpen && <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />}
 
-      <div className="flex-1 flex flex-col min-h-screen">
+      <div className="flex-1 flex flex-col min-h-screen lg:ml-72">
         <header className="sticky top-0 z-30 bg-navy-950/80 backdrop-blur-xl border-b border-white/5 px-6 py-4">
           <div className="flex items-center gap-4">
             <button onClick={() => setSidebarOpen(true)} className="lg:hidden text-gray-400 hover:text-white">
@@ -91,6 +101,12 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
             <div className="flex items-center gap-2">
               <BookOpen className="w-5 h-5 text-emerald-400" />
               <h2 className="text-lg font-semibold text-white">Study Hub</h2>
+            </div>
+            <div className="flex items-center gap-2 ml-auto">
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-orange-500/10 border border-orange-500/20">
+                <Flame className="w-4 h-4 text-orange-400" />
+                <span className="text-sm font-bold text-orange-400">{streak}</span>
+              </div>
             </div>
           </div>
         </header>

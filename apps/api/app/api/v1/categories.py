@@ -11,8 +11,13 @@ admin_only = RoleChecker(["admin"])
 
 
 @router.get("", response_model=List[dict])
-async def list_categories(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_active_user)):
-    categories = await category_service.get_categories_tree(db)
+async def list_categories(
+    target_year: int | None = None,
+    university: str | None = None,
+    db: AsyncSession = Depends(get_db), 
+    user: User = Depends(get_current_active_user)
+):
+    categories = await category_service.get_categories_tree(db, target_year=target_year, university=university)
     return categories
 
 

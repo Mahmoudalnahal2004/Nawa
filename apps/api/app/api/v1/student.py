@@ -11,9 +11,15 @@ router = APIRouter(prefix="/student", tags=["Student Dashboard"])
 student_only = RoleChecker(["student"])
 
 @router.get("/categories", response_model=List[CategoryProgress], dependencies=[Depends(student_only)])
-async def get_student_categories(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_active_user)):
+async def get_student_categories(
+    target_year: int | None = None,
+    university: str | None = None,
+    db: AsyncSession = Depends(get_db), 
+    user: User = Depends(get_current_active_user)
+):
     """
     Returns all active categories with their total question counts (published questions only)
     and the current student's progress for each category.
+    Filtered by target_year and university when set (NULL = universal categories visible to all).
     """
-    return await analytics_service.get_category_progress(db, user.id)
+    return await analytics_service.get_category_progress(db, user.id, target_year=target_year, university=university)

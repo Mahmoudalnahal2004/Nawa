@@ -12,7 +12,7 @@ from app.models.user import User, UserRole
 from app.core.security import hash_password
 
 # Import all models so Base.metadata knows about them
-from app.models import User, Category, Question, UserProgress
+from app.models import User, Category, Question, UserProgress, Bookmark
 
 # Import routers
 from app.api.v1.auth import router as auth_router
@@ -22,7 +22,9 @@ from app.api.v1.questions import router as questions_router
 from app.api.v1.quiz import router as quiz_router
 from app.api.v1.analytics import router as analytics_router
 from app.api.v1.student import router as student_router
-
+from app.api.v1.universities import router as universities_router
+from app.api.v1.notes import router as notes_router
+from app.api.v1.bookmarks import router as bookmarks_router
 
 async def seed_super_admin():
     """Create the Super Admin account if it doesn't exist."""
@@ -89,6 +91,9 @@ app.include_router(questions_router, prefix=API_PREFIX)
 app.include_router(quiz_router, prefix=API_PREFIX)
 app.include_router(analytics_router, prefix=API_PREFIX)
 app.include_router(student_router, prefix=API_PREFIX)
+app.include_router(universities_router, prefix=API_PREFIX)
+app.include_router(notes_router, prefix=API_PREFIX)
+app.include_router(bookmarks_router, prefix=API_PREFIX)
 
 
 @app.get("/")

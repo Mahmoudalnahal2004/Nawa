@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import api from '@/lib/api';
 import { toast } from 'sonner';
-import { ArrowLeft, Play, Minus, Plus, Loader2, BookOpen } from 'lucide-react';
+import { ArrowLeft, Play, Minus, Plus, Loader2, BookOpen, Timer } from 'lucide-react';
 
 export default function QuizSetupPage() {
   const router = useRouter();
@@ -14,6 +14,7 @@ export default function QuizSetupPage() {
   const [numQuestions, setNumQuestions] = useState(10);
   const [maxQuestions, setMaxQuestions] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [mode, setMode] = useState<'practice' | 'exam'>('practice');
 
   useEffect(() => {
     loadCategory();
@@ -39,6 +40,7 @@ export default function QuizSetupPage() {
       const { data } = await api.post('/quiz/start', {
         category_id: parseInt(categoryId),
         num_questions: numQuestions,
+        mode: mode,
       });
       router.push(`/student/quiz/session/${data.session_id}`);
     } catch (err: any) {
@@ -109,6 +111,43 @@ export default function QuizSetupPage() {
               {n}
             </button>
           ))}
+        </div>
+
+        {/* Mode Selection */}
+        <div className="mb-8 space-y-4">
+          <button 
+            onClick={() => setMode('practice')}
+            className={`w-full text-left p-4 rounded-xl border-2 transition-all flex items-start gap-4 ${
+              mode === 'practice' 
+                ? 'bg-emerald-500/10 border-emerald-500/50 text-white shadow-lg shadow-emerald-500/10' 
+                : 'bg-white/5 border-transparent text-gray-400 hover:bg-white/10 hover:text-gray-300'
+            }`}
+          >
+            <div className={`p-2 rounded-lg shrink-0 ${mode === 'practice' ? 'bg-emerald-500/20' : 'bg-white/10'}`}>
+              <BookOpen className={`w-6 h-6 ${mode === 'practice' ? 'text-emerald-400' : 'text-gray-400'}`} />
+            </div>
+            <div>
+              <p className="font-bold text-base mb-1">Practice Mode</p>
+              <p className="text-sm opacity-80">Immediate feedback, correct answers highlighted instantly, and explanations provided after each question.</p>
+            </div>
+          </button>
+
+          <button 
+            onClick={() => setMode('exam')}
+            className={`w-full text-left p-4 rounded-xl border-2 transition-all flex items-start gap-4 ${
+              mode === 'exam' 
+                ? 'bg-purple-500/10 border-purple-500/50 text-white shadow-lg shadow-purple-500/10' 
+                : 'bg-white/5 border-transparent text-gray-400 hover:bg-white/10 hover:text-gray-300'
+            }`}
+          >
+            <div className={`p-2 rounded-lg shrink-0 ${mode === 'exam' ? 'bg-purple-500/20' : 'bg-white/10'}`}>
+              <Timer className={`w-6 h-6 ${mode === 'exam' ? 'text-purple-400' : 'text-gray-400'}`} />
+            </div>
+            <div>
+              <p className="font-bold text-base mb-1">Exam Mode</p>
+              <p className="text-sm opacity-80">Simulated test environment. No feedback until the end. Review your answers and explanations after submitting.</p>
+            </div>
+          </button>
         </div>
 
         <button onClick={startQuiz} disabled={loading} className="btn-primary w-full flex items-center justify-center gap-2 text-lg py-4">

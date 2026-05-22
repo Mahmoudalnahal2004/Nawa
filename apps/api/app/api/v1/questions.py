@@ -30,6 +30,14 @@ async def create_question(data: QuestionCreate, db: AsyncSession = Depends(get_d
     return QuestionResponse.model_validate(q)
 
 
+@router.get("/{question_id}", response_model=QuestionResponse, dependencies=[Depends(admin_only)])
+async def get_question(question_id: int, db: AsyncSession = Depends(get_db)):
+    q = await question_service.get_question_by_id(db, question_id)
+    if q is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Question not found")
+    return QuestionResponse.model_validate(q)
+
+
 @router.put("/{question_id}", response_model=QuestionResponse, dependencies=[Depends(admin_only)])
 async def update_question(question_id: int, data: QuestionUpdate, db: AsyncSession = Depends(get_db)):
     q = await question_service.update_question(db, question_id, data)

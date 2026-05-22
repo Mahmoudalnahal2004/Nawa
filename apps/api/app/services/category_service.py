@@ -23,7 +23,7 @@ async def create_category(db: AsyncSession, data: CategoryCreate) -> Category:
     return category
 
 
-async def get_categories_tree(db: AsyncSession) -> List[dict]:
+async def get_categories_tree(db: AsyncSession, target_year: int | None = None, university: str | None = None) -> List[dict]:
     """Get all categories as a flat list with question counts."""
     # Subquery for question counts
     question_count_subq = (
@@ -35,11 +35,20 @@ async def get_categories_tree(db: AsyncSession) -> List[dict]:
         .subquery()
     )
 
-    result = await db.execute(
+    query = (
         select(Category, func.coalesce(question_count_subq.c.question_count, 0).label("question_count"))
         .outerjoin(question_count_subq, Category.id == question_count_subq.c.category_id)
-        .order_by(Category.name)
     )
+
+    from sqlalchemy import or_
+    
+    if target_year is not None:
+        query = query.where(or_(Category.target_year == None, Category.target_year == target_year))
+        
+    if university is not None:
+        query = query.where(or_(Category.university == None, Category.university == university))
+
+    result = await db.execute(query.order_by(Category.name))
 
     categories = []
     for row in result.all():

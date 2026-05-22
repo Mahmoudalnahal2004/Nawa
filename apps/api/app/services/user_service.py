@@ -28,6 +28,25 @@ async def toggle_user_active(db: AsyncSession, user_id: int, is_active: bool) ->
     return user
 
 
+async def update_profile(db: AsyncSession, user_id: int, full_name: str | None, university: str | None, study_year: int | None, is_anonymous: bool | None = None) -> User | None:
+    """Update a user's profile fields."""
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if user is None:
+        return None
+    if full_name is not None:
+        user.full_name = full_name
+    if university is not None:
+        user.university = university
+    if study_year is not None:
+        user.study_year = study_year
+    if is_anonymous is not None:
+        user.is_anonymous = is_anonymous
+    await db.flush()
+    await db.refresh(user)
+    return user
+
+
 async def get_student_count(db: AsyncSession) -> int:
     """Count active students."""
     result = await db.execute(

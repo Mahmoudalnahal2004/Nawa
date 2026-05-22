@@ -16,6 +16,22 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is not activated. Contact an administrator.")
+    
+    # --- Streak calculation ---
+    from datetime import date, timedelta
+    today = date.today()
+    if user.last_login_date is None:
+        user.current_streak = 1
+    elif user.last_login_date == today:
+        pass  # Already logged in today, streak unchanged
+    elif user.last_login_date == today - timedelta(days=1):
+        user.current_streak += 1  # Consecutive day
+    else:
+        user.current_streak = 1  # Streak broken, reset
+    user.last_login_date = today
+    await db.commit()
+    await db.refresh(user)
+    
     return generate_tokens(user)
 
 

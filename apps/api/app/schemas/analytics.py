@@ -25,3 +25,25 @@ class WeakPointQuestion(BaseModel):
     category_name: str
     times_incorrect: int
     last_attempt: str
+
+class RecentQuizSession(BaseModel):
+    session_id: str
+    category_name: str
+    mode: str
+    total_questions: int
+    score_percentage: float
+    created_at: str
+
+class AnalyticsDashboardResponse(BaseModel):
+    overall: OverallProgress
+    categories: List[CategoryProgress]
+    recent_sessions: List[RecentQuizSession]
+
+
+class LeaderboardEntry(BaseModel):
+    rank: int
+    user_id: int
+    display_name: str
+    correct_count: int
+    total_answered: int
+    accuracy_percentage: float

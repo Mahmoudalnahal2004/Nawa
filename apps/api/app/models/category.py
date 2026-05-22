@@ -13,6 +13,8 @@ class Category(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=True, default="")
     icon: Mapped[str] = mapped_column(String(100), nullable=True, default="📚")
+    target_year: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
+    university: Mapped[str | None] = mapped_column(String(255), nullable=True, default=None)
     parent_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("categories.id", ondelete="SET NULL"),
