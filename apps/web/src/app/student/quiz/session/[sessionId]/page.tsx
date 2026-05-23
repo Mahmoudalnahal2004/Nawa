@@ -158,11 +158,26 @@ export default function QuizSessionPage() {
       setQuestions(data.questions);
       setCategoryName(data.category_name);
       setMode(data.mode || 'practice');
+      if (data.current_question_index) {
+        setCurrentIndex(data.current_question_index);
+      }
     } catch {
       toast.error('Failed to load quiz');
       router.push('/student/dashboard');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handlePause = async () => {
+    try {
+      await api.post(`/quiz/${sessionId}/pause`, {
+        current_question_index: currentIndex
+      });
+      toast.success('Quiz progress saved successfully');
+      router.push('/student/history');
+    } catch {
+      toast.error('Failed to save quiz progress');
     }
   };
 
@@ -192,9 +207,8 @@ export default function QuizSessionPage() {
   const submitExam = async () => {
     if (submitting) return;
     
-    // Check for unanswered questions if time is not up
-    const unansweredCount = questions.filter(q => !examAnswers[q.id]).length;
-    if (timeLeft !== 0 && unansweredCount > 0) {
+    const unansweredCount = questions.filter(q => (mode === 'exam' ? !examAnswers[q.id] : false)).length;
+    if (mode === 'exam' && timeLeft !== 0 && unansweredCount > 0) {
       if (!window.confirm(`You have ${unansweredCount} unanswered questions. Are you sure you want to submit?`)) {
         return;
       }
@@ -202,15 +216,16 @@ export default function QuizSessionPage() {
 
     setSubmitting(true);
     try {
-      const answersList = Object.entries(examAnswers).map(([qId, ans]) => ({
-        question_id: parseInt(qId),
-        selected_answer: ans
-      }));
-      await api.post(`/quiz/${sessionId}/batch_answer`, { answers: answersList });
+      if (mode === 'exam') {
+        const answersList = Object.entries(examAnswers).map(([qId, ans]) => ({
+          question_id: parseInt(qId),
+          selected_answer: ans
+        }));
+        await api.post(`/quiz/${sessionId}/batch_answer`, { answers: answersList });
+      }
       
-      const { data } = await api.get(`/quiz/${sessionId}/results`);
-      setAllFeedback(data.answers);
-      setQuizComplete(true);
+      await api.post(`/quiz/${sessionId}/submit`);
+      router.push(`/student/quiz/summary/${sessionId}`);
     } catch (e) {
       toast.error('Failed to submit exam');
     } finally {
@@ -220,7 +235,6 @@ export default function QuizSessionPage() {
 
   const nextQuestion = () => {
     if (mode === 'exam' && currentIndex + 1 >= questions.length) {
-      // Loop back to first unanswered or flagged if at end, else stay
       const nextIdx = questions.findIndex((q, idx) => idx > currentIndex && (!examAnswers[q.id] || flaggedQuestions[q.id]));
       if (nextIdx !== -1) {
         setCurrentIndex(nextIdx);
@@ -231,7 +245,7 @@ export default function QuizSessionPage() {
     }
 
     if (currentIndex + 1 >= questions.length) {
-      if (mode === 'practice') setQuizComplete(true);
+      submitExam();
     } else {
       setCurrentIndex(prev => prev + 1);
       setSelectedAnswer(null);
@@ -247,66 +261,7 @@ export default function QuizSessionPage() {
     );
   }
 
-  // Results screen
-  if (quizComplete) {
-    const correct = allFeedback.filter(f => f.is_correct).length;
-    const total = questions.length;
-    const percentage = Math.round((correct / total) * 100);
 
-    return (
-      <div className="max-w-2xl mx-auto space-y-8 animate-fade-in py-8">
-        <div className="glass-card p-10 text-center">
-          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center mx-auto mb-6 shadow-lg shadow-emerald-500/30">
-            <Trophy className="w-10 h-10 text-white" />
-          </div>
-          <h1 className="text-3xl font-bold text-white mb-2">Quiz Complete!</h1>
-          <p className="text-gray-400 mb-8">{categoryName}</p>
-
-          <div className="grid grid-cols-3 gap-4 mb-8">
-            <div className="bg-white/5 rounded-xl p-4">
-              <p className="text-3xl font-bold text-white">{correct}</p>
-              <p className="text-xs text-emerald-400">Correct</p>
-            </div>
-            <div className="bg-white/5 rounded-xl p-4">
-              <p className="text-3xl font-bold text-white">{total - correct}</p>
-              <p className="text-xs text-rose-400">Incorrect</p>
-            </div>
-            <div className="bg-white/5 rounded-xl p-4">
-              <p className={`text-3xl font-bold ${percentage >= 70 ? 'text-emerald-400' : percentage >= 50 ? 'text-amber-400' : 'text-rose-400'}`}>
-                {percentage}%
-              </p>
-              <p className="text-xs text-gray-400">Score</p>
-            </div>
-          </div>
-
-          <div className="flex gap-3 justify-center">
-            <button onClick={() => router.push('/student/dashboard')} className="btn-secondary flex items-center gap-2">
-              <Home className="w-4 h-4" /> Modules
-            </button>
-            <button onClick={() => router.push('/student/weak-points')} className="btn-primary flex items-center gap-2">
-              Review Weak Points <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-
-        {/* Answer Review */}
-        <div className="glass-card p-6">
-          <h3 className="text-sm font-semibold text-white mb-4">Answer Review</h3>
-          <div className="space-y-2">
-            {allFeedback.map((fb, i) => (
-              <div key={i} className={`flex items-center gap-3 px-4 py-2.5 rounded-xl ${fb.is_correct ? 'bg-emerald-500/5' : 'bg-rose-500/5'}`}>
-                {fb.is_correct ? <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" /> : <XCircle className="w-4 h-4 text-rose-400 shrink-0" />}
-                <span className="text-sm text-gray-300 flex-1 line-clamp-1">Q{questions.findIndex(q => q.id === fb.question_id) + 1}: {questions.find(q => q.id === fb.question_id)?.question_text?.substring(0, 80)}...</span>
-                <span className={`text-xs font-medium ${fb.is_correct ? 'text-emerald-400' : 'text-rose-400'}`}>
-                  {fb.selected_answer} {fb.is_correct ? '✓' : `→ ${fb.correct_answer}`}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   const question = questions[currentIndex];
   const options = [
@@ -407,6 +362,9 @@ export default function QuizSessionPage() {
                 <Clock className="w-4 h-4" />
                 {timeLeft !== null ? formatTime(timeLeft) : '00:00'}
               </div>
+              <button onClick={handlePause} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 text-gray-300 hover:bg-white/10 hover:text-white transition-colors border border-white/10 text-sm font-medium">
+                <XCircle className="w-4 h-4" /> Save & Exit
+              </button>
             </div>
           </div>
 
@@ -451,8 +409,8 @@ export default function QuizSessionPage() {
                 <button onClick={() => setFlaggedQuestions(p => ({...p, [question.id]: !p[question.id]}))} className={`flex items-center gap-2 text-sm font-medium transition-colors px-4 py-2 rounded-lg ${flaggedQuestions[question.id] ? 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/20' : 'bg-slate-800 text-gray-400 hover:text-white hover:bg-slate-700'}`}>
                   <Flag className="w-4 h-4" /> {flaggedQuestions[question.id] ? 'Flagged for Review' : 'See Later'}
                 </button>
-                <button onClick={nextQuestion} className="btn-primary flex items-center gap-2 px-6 py-2.5 shadow-lg shadow-emerald-500/20">
-                  {currentIndex + 1 >= questions.length ? 'Review Exam' : 'Next Question'} <ArrowRight className="w-4 h-4" />
+                <button onClick={currentIndex + 1 >= questions.length ? submitExam : nextQuestion} className="btn-primary flex items-center gap-2 px-6 py-2.5 shadow-lg shadow-emerald-500/20">
+                  {currentIndex + 1 >= questions.length ? 'Submit Exam' : 'Next Question'} <ArrowRight className="w-4 h-4" />
                 </button>
               </div>
 
@@ -488,12 +446,15 @@ export default function QuizSessionPage() {
 
   // PRACTICE MODE RENDER (Original layout)
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <div className="max-w-3xl mx-auto space-y-6 pt-6">
       {/* Progress bar */}
       <div className="glass-card p-4">
         <div className="flex items-center justify-between mb-2">
           <span className="text-sm font-medium text-gray-400">{categoryName}</span>
           <div className="flex items-center gap-4">
+            <button onClick={handlePause} className="text-sm flex items-center gap-1.5 transition-colors text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded-lg border border-white/10">
+              <XCircle className="w-4 h-4" /> Save & Exit
+            </button>
             <button onClick={() => setNotesPanelOpen(!notesPanelOpen)} className={`text-sm flex items-center gap-1.5 transition-colors ${notesPanelOpen ? 'text-blue-400' : 'text-gray-400 hover:text-white'}`}>
               <StickyNote className="w-4 h-4" /> {notesPanelOpen ? 'Close Notes' : 'Notes'}
             </button>
@@ -568,8 +529,8 @@ export default function QuizSessionPage() {
               )}
             </div>
 
-            <button onClick={nextQuestion} className="btn-primary w-full flex items-center justify-center gap-2">
-              {currentIndex + 1 >= questions.length ? 'View Results' : 'Next Question'}
+            <button onClick={currentIndex + 1 >= questions.length ? submitExam : nextQuestion} className="btn-primary w-full flex items-center justify-center gap-2">
+              {currentIndex + 1 >= questions.length ? 'Submit Exam' : 'Next Question'}
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>

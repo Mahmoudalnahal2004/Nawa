@@ -62,8 +62,13 @@ async def start_quiz(db: AsyncSession, user_id: int, category_id: int, num_quest
         "user_id": user_id, "category_id": category_id, "category_name": category.name,
         "mode": mode, "questions": quiz_questions, "answer_key": answer_key, "answers": [],
         "created_at": datetime.now(timezone.utc).isoformat(),
+        "status": "in_progress", "current_question_index": 0
     }
-    return QuizSessionResponse(session_id=session_id, mode=mode, questions=quiz_questions, total_questions=len(quiz_questions), category_name=category.name)
+    return QuizSessionResponse(
+        session_id=session_id, mode=mode, questions=quiz_questions, 
+        total_questions=len(quiz_questions), category_name=category.name,
+        status="in_progress", current_question_index=0
+    )
 
 
 async def submit_answer(db: AsyncSession, session_id: str, user_id: int, question_id: int, selected_answer: str) -> AnswerFeedback:
@@ -112,6 +117,35 @@ async def submit_batch_answers(db: AsyncSession, session_id: str, user_id: int, 
             
     await db.flush()
     return feedbacks
+
+
+async def pause_quiz(session_id: str, user_id: int, current_question_index: int) -> dict:
+    session = _quiz_sessions.get(session_id)
+    if session is None:
+        raise ValueError("Quiz session not found")
+    if session["user_id"] != user_id:
+        raise ValueError("Not your quiz session")
+    
+    session["current_question_index"] = current_question_index
+    session["status"] = "in_progress"
+    
+    return {"message": "Session paused successfully", "current_question_index": current_question_index}
+
+
+async def submit_exam(session_id: str, user_id: int) -> dict:
+    session = _quiz_sessions.get(session_id)
+    if session is None:
+        raise ValueError("Quiz session not found")
+    if session["user_id"] != user_id:
+        raise ValueError("Not your quiz session")
+        
+    session["status"] = "completed"
+    
+    total = len(session["questions"])
+    correct = sum(1 for a in session["answers"] if a.is_correct)
+    score = (correct / total * 100) if total > 0 else 0
+    
+    return {"message": "Quiz submitted successfully", "score_percentage": round(score, 1), "status": "completed"}
 
 
 async def get_quiz_results(session_id: str, user_id: int) -> QuizResultSummary:
@@ -219,10 +253,12 @@ async def generate_custom_quiz(db: AsyncSession, user_id: int, request) -> QuizS
         "user_id": user_id, "category_id": 0, "category_name": "Custom Generated Quiz",
         "mode": request.quiz_mode, "questions": quiz_questions, "answer_key": answer_key, "answers": [],
         "created_at": datetime.now(timezone.utc).isoformat(),
+        "status": "in_progress", "current_question_index": 0
     }
     
     return QuizSessionResponse(
         session_id=session_id, mode=request.quiz_mode, 
         questions=quiz_questions, total_questions=len(quiz_questions), 
-        category_name="Custom Generated Quiz"
+        category_name="Custom Generated Quiz",
+        status="in_progress", current_question_index=0
     )

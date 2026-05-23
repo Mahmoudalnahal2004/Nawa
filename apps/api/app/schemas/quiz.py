@@ -16,7 +16,8 @@ class QuizQuestion(BaseModel):
     option_c: str
     option_d: str
     option_e: Optional[str]
-    # Note: correct_answer is NOT included — revealed after answering
+    correct_answer: Optional[str] = None
+    explanation: Optional[str] = None
 
 
 class QuizSessionResponse(BaseModel):
@@ -25,6 +26,8 @@ class QuizSessionResponse(BaseModel):
     questions: List[QuizQuestion]
     total_questions: int
     category_name: str
+    current_question_index: int = 0
+    status: str = 'in_progress'
 
 
 class AnswerRequest(BaseModel):
@@ -62,3 +65,7 @@ class QuizGenerateRequest(BaseModel):
     question_count: int
     mode: Literal['Unused', 'Incorrect', 'Bookmarked', 'All']
     quiz_mode: Literal['practice', 'exam'] = 'practice'
+
+
+class PauseSessionRequest(BaseModel):
+    current_question_index: int
