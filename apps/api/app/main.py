@@ -12,7 +12,7 @@ from app.models.user import User, UserRole
 from app.core.security import hash_password
 
 # Import all models so Base.metadata knows about them
-from app.models import User, Category, Question, UserProgress, Bookmark
+from app.models import User, Category, Question, UserProgress, Bookmark, QuizSession
 
 # Import routers
 from app.api.v1.auth import router as auth_router

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/api';
 import { toast } from 'sonner';
-import { User, Building2, GraduationCap, Save, Loader2, ArrowLeft, EyeOff } from 'lucide-react';
+import { User, Building2, GraduationCap, Save, Loader2, ArrowLeft, EyeOff, Lock, KeyRound, Eye } from 'lucide-react';
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -17,6 +17,13 @@ export default function ProfilePage() {
     study_year: '' as string,
     is_anonymous: false,
   });
+  const [passwordForm, setPasswordForm] = useState({
+    current_password: '',
+    new_password: '',
+  });
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -56,6 +63,21 @@ export default function ProfilePage() {
       toast.error(err.response?.data?.detail || 'Failed to save profile');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!passwordForm.current_password || !passwordForm.new_password) return;
+    setChangingPassword(true);
+    try {
+      await api.post('/users/me/change-password', passwordForm);
+      toast.success('Password changed successfully!');
+      setPasswordForm({ current_password: '', new_password: '' });
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Failed to change password');
+    } finally {
+      setChangingPassword(false);
     }
   };
 
@@ -182,6 +204,73 @@ export default function ProfilePage() {
         >
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
           {saving ? 'Saving...' : 'Save Profile'}
+        </button>
+      </form>
+
+      {/* Change Password */}
+      <form onSubmit={handlePasswordSubmit} className="glass-card p-8 space-y-6">
+        <div>
+          <h2 className="text-lg font-bold text-white flex items-center gap-2 mb-1">
+            <Lock className="w-5 h-5 text-blue-400" /> Change Password
+          </h2>
+          <p className="text-sm text-gray-400">Update your account security credentials.</p>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1.5 flex items-center gap-2">
+              <KeyRound className="w-4 h-4 text-gray-400" /> Current Password
+            </label>
+            <div className="relative">
+              <input
+                type={showCurrent ? "text" : "password"}
+                required
+                value={passwordForm.current_password}
+                onChange={e => setPasswordForm(prev => ({ ...prev, current_password: e.target.value }))}
+                placeholder="Enter your current password"
+                className="input-field pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowCurrent(!showCurrent)}
+                className="absolute inset-y-0 right-3 flex items-center text-gray-400 hover:text-white transition-colors"
+              >
+                {showCurrent ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1.5 flex items-center gap-2">
+              <KeyRound className="w-4 h-4 text-emerald-400" /> New Password
+            </label>
+            <div className="relative">
+              <input
+                type={showNew ? "text" : "password"}
+                required
+                minLength={6}
+                value={passwordForm.new_password}
+                onChange={e => setPasswordForm(prev => ({ ...prev, new_password: e.target.value }))}
+                placeholder="Enter your new password"
+                className="input-field pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowNew(!showNew)}
+                className="absolute inset-y-0 right-3 flex items-center text-gray-400 hover:text-white transition-colors"
+              >
+                {showNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <button
+          type="submit"
+          disabled={changingPassword || !passwordForm.current_password || !passwordForm.new_password}
+          className="w-full bg-blue-600/20 text-blue-400 border border-blue-500/30 hover:bg-blue-600/30 hover:text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {changingPassword ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          {changingPassword ? 'Updating...' : 'Update Password'}
         </button>
       </form>
     </div>

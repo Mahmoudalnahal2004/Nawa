@@ -11,10 +11,11 @@ export default function QuizSetupPage() {
   const params = useParams();
   const categoryId = params.categoryId as string;
   const [category, setCategory] = useState<any>(null);
-  const [numQuestions, setNumQuestions] = useState(10);
+  const [numQuestions, setNumQuestions] = useState<number | string>(10);
   const [maxQuestions, setMaxQuestions] = useState(0);
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<'practice' | 'exam'>('practice');
+  const [quizName, setQuizName] = useState('');
 
   useEffect(() => {
     loadCategory();
@@ -26,8 +27,9 @@ export default function QuizSetupPage() {
       const cat = data.find((c: any) => c.category_id === parseInt(categoryId));
       if (cat) {
         setCategory(cat);
-        setMaxQuestions(cat.total_questions);
-        setNumQuestions(Math.min(10, cat.total_questions));
+        const maxQ = Math.min(cat.total_questions, 150);
+        setMaxQuestions(maxQ);
+        setNumQuestions(Math.min(10, maxQ));
       }
     } catch {
       toast.error('Failed to load category');
@@ -35,12 +37,19 @@ export default function QuizSetupPage() {
   };
 
   const startQuiz = async () => {
+    const currentNum = typeof numQuestions === 'number' ? numQuestions : parseInt(numQuestions as string) || 1;
+    if (currentNum > maxQuestions) {
+      toast.error(`Maximum allowed questions is ${maxQuestions}`);
+      return;
+    }
+
     setLoading(true);
     try {
       const { data } = await api.post('/quiz/start', {
         category_id: parseInt(categoryId),
-        num_questions: numQuestions,
+        num_questions: currentNum,
         mode: mode,
+        quiz_name: quizName.trim() || undefined,
       });
       router.push(`/student/quiz/session/${data.session_id}`);
     } catch (err: any) {
@@ -64,17 +73,34 @@ export default function QuizSetupPage() {
       </button>
 
       <div className="glass-card p-8 text-center">
-        <div className="text-5xl mb-4">{category.category_icon}</div>
+        <div className="text-5xl mb-4 flex justify-center">
+          {category.category_icon?.startsWith('/') ? (
+            <img src={`http://localhost:8000${category.category_icon}`} alt={category.category_name} className="h-16 object-contain drop-shadow-xl" />
+          ) : (
+            category.category_icon
+          )}
+        </div>
         <h1 className="text-2xl font-bold text-white mb-2">{category.category_name}</h1>
         <p className="text-gray-400">{category.total_questions} questions available</p>
       </div>
 
       <div className="glass-card p-8">
+        <div className="mb-8">
+          <input
+            type="text"
+            placeholder="Quiz Name (Optional)"
+            value={quizName}
+            onChange={(e) => setQuizName(e.target.value)}
+            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50 transition-all"
+            maxLength={60}
+          />
+        </div>
+
         <h2 className="text-lg font-semibold text-white mb-6 text-center">How many questions?</h2>
 
         <div className="flex items-center justify-center gap-6 mb-8">
           <button
-            onClick={() => setNumQuestions(n => Math.max(1, n - 5))}
+            onClick={() => setNumQuestions(n => Math.max(1, (typeof n === 'number' ? n : parseInt(n as string) || 1) - 5))}
             className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center text-white hover:bg-white/20 transition-colors"
           >
             <Minus className="w-5 h-5" />
@@ -84,7 +110,22 @@ export default function QuizSetupPage() {
             <input
               type="number"
               value={numQuestions}
-              onChange={(e) => setNumQuestions(Math.max(1, Math.min(maxQuestions, parseInt(e.target.value) || 1)))}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === '') {
+                  setNumQuestions('');
+                } else {
+                  const parsed = parseInt(val);
+                  if (!isNaN(parsed)) {
+                    setNumQuestions(Math.max(1, Math.min(maxQuestions, parsed)));
+                  }
+                }
+              }}
+              onBlur={() => {
+                if (numQuestions === '' || isNaN(numQuestions as number)) {
+                  setNumQuestions(1);
+                }
+              }}
               className="w-28 h-20 bg-white/5 border border-white/10 rounded-2xl text-center text-4xl font-bold text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
               min={1}
               max={maxQuestions}
@@ -92,7 +133,7 @@ export default function QuizSetupPage() {
           </div>
 
           <button
-            onClick={() => setNumQuestions(n => Math.min(maxQuestions, n + 5))}
+            onClick={() => setNumQuestions(n => Math.min(maxQuestions, (typeof n === 'number' ? n : parseInt(n as string) || 1) + 5))}
             className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center text-white hover:bg-white/20 transition-colors"
           >
             <Plus className="w-5 h-5" />

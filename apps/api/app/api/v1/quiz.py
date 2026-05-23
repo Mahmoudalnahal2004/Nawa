@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_db, get_current_active_user, RoleChecker
 from app.models.user import User
-from app.schemas.quiz import QuizStartRequest, QuizSessionResponse, AnswerRequest, AnswerFeedback, QuizResultSummary, BatchAnswerRequest, QuizAvailabilityRequest, QuizGenerateRequest, PauseSessionRequest
+from app.schemas.quiz import QuizStartRequest, QuizSessionResponse, AnswerRequest, AnswerFeedback, QuizResultSummary, BatchAnswerRequest, QuizAvailabilityRequest, QuizGenerateRequest, PauseSessionRequest, QuizRenameRequest
 from app.services import quiz_service
 
 router = APIRouter(prefix="/quiz", tags=["Quiz Engine"])
@@ -12,9 +12,16 @@ student_only = RoleChecker(["student"])
 @router.post("/start", response_model=QuizSessionResponse, dependencies=[Depends(student_only)])
 async def start_quiz(data: QuizStartRequest, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_active_user)):
     try:
-        return await quiz_service.start_quiz(db, user.id, data.category_id, data.num_questions, data.mode)
+        return await quiz_service.start_quiz(db, user.id, data.category_id, data.num_questions, data.mode, data.quiz_name)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.get("/count")
+async def get_quiz_count(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    from app.services.quiz_service import get_user_session_count
+    count = await get_user_session_count(db, current_user.id)
+    return {"total": count}
 
 
 @router.post("/availability", response_model=dict[int, int], dependencies=[Depends(student_only)])
@@ -31,8 +38,8 @@ async def generate_quiz(data: QuizGenerateRequest, db: AsyncSession = Depends(ge
 
 
 @router.get("/{session_id}", response_model=QuizSessionResponse, dependencies=[Depends(student_only)])
-async def get_quiz(session_id: str, user: User = Depends(get_current_active_user)):
-    session = quiz_service.get_quiz_session(session_id)
+async def get_quiz(session_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_active_user)):
+    session = await quiz_service.get_quiz_session(db, session_id)
     if session is None or session["user_id"] != user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Quiz session not found")
         
@@ -41,7 +48,7 @@ async def get_quiz(session_id: str, user: User = Depends(get_current_active_user
         from app.schemas.quiz import QuizQuestion
         populated_questions = []
         for q in questions:
-            key = session["answer_key"].get(q.id)
+            key = session["answer_key"].get(str(q.id))
             if key:
                 populated_questions.append(QuizQuestion(
                     **q.model_dump(exclude={'correct_answer', 'explanation'}),
@@ -58,8 +65,12 @@ async def get_quiz(session_id: str, user: User = Depends(get_current_active_user
         questions=questions, 
         total_questions=len(questions), 
         category_name=session["category_name"],
+        quiz_name=session.get("quiz_name"),
         status=session.get("status", "in_progress"),
-        current_question_index=session.get("current_question_index", 0)
+        current_question_index=session.get("current_question_index", 0),
+        answers=session.get("answers", []),
+        exam_answers=session.get("exam_answers", {}),
+        flagged_questions=session.get("flagged_questions", {})
     )
 
 
@@ -74,15 +85,15 @@ async def submit_answer(session_id: str, data: AnswerRequest, db: AsyncSession =
 @router.post("/{session_id}/pause", dependencies=[Depends(student_only)])
 async def pause_quiz(session_id: str, data: PauseSessionRequest, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_active_user)):
     try:
-        return await quiz_service.pause_quiz(session_id, user.id, data.current_question_index)
+        return await quiz_service.pause_quiz(db, session_id, user.id, data)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.post("/{session_id}/submit", dependencies=[Depends(student_only)])
-async def submit_exam(session_id: str, user: User = Depends(get_current_active_user)):
+async def submit_exam(session_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_active_user)):
     try:
-        return await quiz_service.submit_exam(session_id, user.id)
+        return await quiz_service.submit_exam(db, session_id, user.id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -96,8 +107,24 @@ async def submit_batch_answers(session_id: str, data: BatchAnswerRequest, db: As
 
 
 @router.get("/{session_id}/results", response_model=QuizResultSummary, dependencies=[Depends(student_only)])
-async def get_results(session_id: str, user: User = Depends(get_current_active_user)):
+async def get_results(session_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_active_user)):
     try:
-        return await quiz_service.get_quiz_results(session_id, user.id)
+        return await quiz_service.get_quiz_results(db, session_id, user.id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+@router.patch("/{session_id}/rename", dependencies=[Depends(student_only)])
+async def rename_quiz(session_id: str, data: QuizRenameRequest, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_active_user)):
+    try:
+        return await quiz_service.rename_quiz_session(db, session_id, user.id, data.quiz_name)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.delete("/{session_id}", dependencies=[Depends(student_only)])
+async def delete_quiz(session_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_active_user)):
+    try:
+        return await quiz_service.delete_quiz_session(db, session_id, user.id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

@@ -1,0 +1,348 @@
+'use client';
+
+import { useEffect, useState, useMemo } from 'react';
+import api from '@/lib/api';
+import { toast } from 'sonner';
+import { Loader2, ArrowLeft, CheckCircle2, ChevronLeft, ChevronRight, LayoutTemplate, Filter, ChevronDown, ChevronRight as ChevronRightIcon, Search, XCircle } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+
+interface Category {
+  id: number;
+  name: string;
+  children?: Category[];
+}
+
+interface Question {
+  id: number;
+  category_name: string;
+  question_text: string;
+  image_url: string | null;
+  option_a: string;
+  option_b: string;
+  option_c: string;
+  option_d: string;
+  option_e: string | null;
+  correct_answer: string;
+  explanation: string | null;
+}
+
+export default function IncorrectReviewPage() {
+  const router = useRouter();
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [loading, setLoading] = useState(true);
+  
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const pageSize = 10;
+
+  // Filter State
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [availableCounts, setAvailableCounts] = useState<Record<number, number>>({});
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<number[] | null>(null);
+  const [expandedParents, setExpandedParents] = useState<Record<number, boolean>>({});
+  const [showMobileFilter, setShowMobileFilter] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 500);
+    return () => clearTimeout(handler);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    fetchFilterData();
+  }, []);
+
+  useEffect(() => {
+    fetchQuestions(page, selectedCategoryIds, debouncedSearch);
+  }, [page, selectedCategoryIds, debouncedSearch]);
+
+  const fetchFilterData = async () => {
+    try {
+      const [catRes, countRes] = await Promise.all([
+        api.get('/categories/tree'),
+        api.post('/quiz/availability', { mode: 'Incorrect' })
+      ]);
+      setCategories(catRes.data);
+      setAvailableCounts(countRes.data);
+    } catch (err) {
+      toast.error('Failed to load filters');
+    }
+  };
+
+  const fetchQuestions = async (p: number, catIds: number[] | null, search: string) => {
+    setLoading(true);
+    try {
+      let url = `/analytics/incorrect?page=${p}&page_size=${pageSize}`;
+      if (catIds && catIds.length > 0) {
+        url += `&category_ids=${catIds.join(',')}`;
+      }
+      if (search) {
+        url += `&search=${encodeURIComponent(search)}`;
+      }
+      const res = await api.get(url);
+      setQuestions(res.data.questions);
+      setTotal(res.data.total);
+    } catch (err) {
+      toast.error('Failed to load incorrect questions');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSelectCategory = (categoryId: number | null, childIds: number[] = []) => {
+    setPage(1);
+    if (categoryId === null) {
+      setSelectedCategoryIds(null);
+    } else {
+      setSelectedCategoryIds([categoryId, ...childIds]);
+    }
+    setShowMobileFilter(false);
+  };
+
+  const toggleParent = (id: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setExpandedParents(prev => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const totalPages = Math.ceil(total / pageSize);
+
+  const filterTree = useMemo(() => {
+    return categories.map(parent => {
+      const children = parent.children?.filter(c => availableCounts[c.id] > 0) || [];
+      const parentCount = availableCounts[parent.id] || 0;
+      const totalCount = children.reduce((sum, c) => sum + (availableCounts[c.id] || 0), parentCount);
+      return {
+        ...parent,
+        totalCount,
+        children
+      };
+    }).filter(parent => parent.totalCount > 0);
+  }, [categories, availableCounts]);
+
+  if (loading && questions.length === 0 && filterTree.length === 0) {
+    return (
+      <div className="flex justify-center items-center min-h-[60vh]">
+        <Loader2 className="w-10 h-10 text-rose-400 animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-6xl mx-auto pb-32 animate-fade-in space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 gap-4">
+        <div className="flex items-center gap-4">
+          <button 
+            onClick={() => router.push('/student/history')}
+            className="p-2 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <div>
+            <h1 className="text-3xl font-bold text-white flex items-center gap-3">
+              Incorrect Answers Review
+            </h1>
+            <p className="text-gray-400 mt-1">Review questions you've answered incorrectly to improve your weak points.</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <button 
+            className="sm:hidden flex items-center gap-2 text-sm font-medium text-gray-300 bg-slate-800 px-4 py-2 rounded-lg border border-slate-700"
+            onClick={() => setShowMobileFilter(!showMobileFilter)}
+          >
+            <Filter className="w-4 h-4" /> Filter
+          </button>
+          <div className="text-sm font-semibold text-rose-400 bg-rose-500/10 border border-rose-500/20 px-3 py-2 rounded-lg">
+            {total} Incorrect Questions
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-col lg:flex-row gap-8 items-start">
+        {/* Sidebar Filter */}
+        <div className={`w-full lg:w-72 shrink-0 glass-card p-5 ${!showMobileFilter && 'hidden lg:block'}`}>
+          <div className="flex items-center gap-2 font-bold text-white mb-4 text-lg">
+            <Filter className="w-5 h-5 text-rose-400" /> Filter
+          </div>
+          
+          <div className="space-y-1">
+            <button 
+              onClick={() => handleSelectCategory(null)}
+              className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors ${selectedCategoryIds === null ? 'bg-rose-500/20 text-rose-400' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}
+            >
+              All Modules
+            </button>
+            
+            {filterTree.map(parent => {
+              const isExpanded = expandedParents[parent.id] !== false; // Default expanded
+              const parentChildIds = parent.children.map(c => c.id);
+              const isSelected = selectedCategoryIds?.includes(parent.id);
+              
+              return (
+                <div key={parent.id} className="pt-2">
+                  <div 
+                    onClick={() => handleSelectCategory(parent.id, parentChildIds)}
+                    className={`flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer transition-colors group ${isSelected ? 'bg-rose-500/20 text-rose-400' : 'text-gray-300 hover:bg-white/5'}`}
+                  >
+                    <div className="flex items-center gap-2 font-medium text-sm">
+                      <button onClick={(e) => toggleParent(parent.id, e)} className="p-0.5 rounded hover:bg-white/10 text-gray-400 group-hover:text-inherit transition-colors">
+                        {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRightIcon className="w-4 h-4" />}
+                      </button>
+                      {parent.name}
+                    </div>
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${isSelected ? 'bg-rose-500/20 text-rose-300' : 'bg-slate-800 text-gray-400 group-hover:bg-slate-700'}`}>
+                      {parent.totalCount}
+                    </span>
+                  </div>
+                  
+                  {isExpanded && parent.children.length > 0 && (
+                    <div className="ml-7 mt-1 space-y-1 border-l border-white/10 pl-2">
+                      {parent.children.map(child => {
+                        const childSelected = selectedCategoryIds?.length === 1 && selectedCategoryIds[0] === child.id;
+                        return (
+                          <div 
+                            key={child.id}
+                            onClick={() => handleSelectCategory(child.id)}
+                            className={`flex items-center justify-between px-3 py-1.5 rounded-lg cursor-pointer transition-colors ${childSelected ? 'bg-rose-500/20 text-rose-400' : 'text-gray-400 hover:bg-white/5 hover:text-gray-200'}`}
+                          >
+                            <span className="text-sm">{child.name}</span>
+                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${childSelected ? 'bg-rose-500/20 text-rose-300' : 'bg-slate-800 text-gray-500'}`}>
+                              {availableCounts[child.id]}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Main Content */}
+        <div className="flex-1 w-full space-y-6 relative min-h-[400px]">
+          <div className="relative glass-card p-2 flex items-center border border-rose-500/10">
+            <Search className="w-5 h-5 absolute left-5 text-gray-400" />
+            <input 
+              type="text" 
+              placeholder="Search through your incorrect questions..." 
+              value={searchQuery}
+              onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
+              className="w-full bg-transparent border-none pl-12 pr-4 py-2 text-white focus:outline-none focus:ring-0 placeholder-gray-500"
+            />
+          </div>
+
+          {loading && questions.length > 0 && (
+            <div className="absolute inset-0 z-10 bg-slate-950/50 backdrop-blur-sm flex items-center justify-center rounded-2xl">
+              <Loader2 className="w-8 h-8 text-rose-400 animate-spin" />
+            </div>
+          )}
+
+          {questions.length === 0 && !loading ? (
+            <div className="glass-card p-12 text-center flex flex-col items-center border border-rose-500/10">
+              <div className="w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center mb-4">
+                <LayoutTemplate className="w-8 h-8 text-gray-500" />
+              </div>
+              <h2 className="text-xl font-bold text-white mb-2">No Incorrect Answers Found</h2>
+              <p className="text-gray-400 max-w-md">There are no incorrect questions matching this filter. Great job!</p>
+            </div>
+          ) : (
+            questions.map((q, index) => (
+              <div key={q.id} className="glass-card p-6 md:p-8 animate-slide-up border border-rose-500/10" style={{ animationDelay: `${index * 50}ms` }}>
+                <div className="flex items-start justify-between gap-4 mb-6">
+                  <div className="flex-1">
+                    {q.category_name && (
+                      <span className="text-xs font-bold uppercase tracking-wider text-rose-400 mb-2 block">
+                        {q.category_name}
+                      </span>
+                    )}
+                    <h3 className="text-lg md:text-xl font-semibold text-white leading-relaxed">
+                      {q.question_text}
+                    </h3>
+                  </div>
+                </div>
+
+                {q.image_url && (
+                  <div className="mb-6 rounded-xl overflow-hidden border border-white/10 bg-black/40">
+                    <img src={`${process.env.NEXT_PUBLIC_API_URL}${q.image_url}`} alt="Question visual" className="w-full max-h-96 object-contain" />
+                  </div>
+                )}
+
+                <div className="space-y-3 mb-8">
+                  {[
+                    { key: 'A', val: q.option_a },
+                    { key: 'B', val: q.option_b },
+                    { key: 'C', val: q.option_c },
+                    { key: 'D', val: q.option_d },
+                    { key: 'E', val: q.option_e },
+                  ].filter(opt => opt.val).map(opt => {
+                    const isCorrect = q.correct_answer === opt.key;
+                    return (
+                      <div 
+                        key={opt.key}
+                        className={`p-4 rounded-xl border flex items-start gap-4 transition-all ${
+                          isCorrect 
+                            ? 'bg-emerald-500/10 border-emerald-500/50 shadow-[0_0_15px_rgba(16,185,129,0.1)]' 
+                            : 'bg-slate-900 border-slate-700 opacity-60'
+                        }`}
+                      >
+                        <div className={`shrink-0 w-7 h-7 flex items-center justify-center rounded-lg font-bold text-sm ${
+                          isCorrect ? 'bg-emerald-500 text-white' : 'bg-slate-800 text-gray-400'
+                        }`}>
+                          {opt.key}
+                        </div>
+                        <div className={`flex-1 text-sm pt-1 ${isCorrect ? 'text-emerald-50 font-medium' : 'text-gray-400'}`}>
+                          {opt.val}
+                        </div>
+                        {isCorrect && <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />}
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {q.explanation && (
+                  <div className="bg-blue-500/5 border border-blue-500/20 rounded-xl p-5 md:p-6">
+                    <h4 className="text-blue-400 font-bold mb-2 flex items-center gap-2 text-sm uppercase tracking-wider">
+                      Explanation
+                    </h4>
+                    <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-wrap">
+                      {q.explanation}
+                    </p>
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between glass-card p-4 mt-8 sticky bottom-4 z-20 shadow-2xl">
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page === 1 || loading}
+                className="px-4 py-2 flex items-center gap-2 rounded-lg font-medium text-sm transition-colors disabled:opacity-50 text-gray-300 hover:bg-white/10 bg-slate-800"
+              >
+                <ChevronLeft className="w-4 h-4" /> Previous
+              </button>
+              
+              <div className="text-sm font-medium text-gray-400 flex items-center gap-2">
+                Page <span className="text-white bg-slate-800 px-2 py-1 rounded-md">{page}</span> of {totalPages}
+              </div>
+
+              <button
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages || loading}
+                className="px-4 py-2 flex items-center gap-2 rounded-lg font-medium text-sm transition-colors disabled:opacity-50 text-gray-300 hover:bg-white/10 bg-slate-800"
+              >
+                Next <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

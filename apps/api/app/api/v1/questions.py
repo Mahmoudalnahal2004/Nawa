@@ -29,6 +29,11 @@ async def create_question(data: QuestionCreate, db: AsyncSession = Depends(get_d
     q = await question_service.create_question(db, data)
     return QuestionResponse.model_validate(q)
 
+@router.get("/stats", dependencies=[Depends(admin_only)])
+async def get_stats(db: AsyncSession = Depends(get_db)):
+    return await question_service.get_question_stats(db)
+
+
 
 @router.get("/{question_id}", response_model=QuestionResponse, dependencies=[Depends(admin_only)])
 async def get_question(question_id: int, db: AsyncSession = Depends(get_db)):
@@ -83,7 +88,3 @@ async def upload_image(file: UploadFile = File(...)):
         f.write(content)
     return {"url": f"/uploads/{filename}", "filename": filename}
 
-
-@router.get("/stats", dependencies=[Depends(admin_only)])
-async def get_stats(db: AsyncSession = Depends(get_db)):
-    return await question_service.get_question_stats(db)

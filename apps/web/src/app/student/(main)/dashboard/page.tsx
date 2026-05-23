@@ -10,6 +10,7 @@ interface Category {
   id: number;
   name: string;
   icon: string;
+  target_year?: number | null;
   question_count: number;
   children?: Category[];
 }
@@ -28,22 +29,34 @@ export default function QuizGeneratorPage() {
   
   const [questionCount, setQuestionCount] = useState<number>(40);
   const [quizMode, setQuizMode] = useState<'practice' | 'exam'>('exam');
+  const [quizName, setQuizName] = useState<string>('');
   const [generating, setGenerating] = useState(false);
 
   useEffect(() => {
-    fetchCategories();
+    fetchData();
   }, []);
 
   useEffect(() => {
     fetchAvailability(selectedMode);
   }, [selectedMode]);
 
-  const fetchCategories = async () => {
+  const fetchData = async () => {
     try {
-      const { data } = await api.get('/categories/tree');
-      setCategories(data);
+      const [userRes, catRes] = await Promise.all([
+        api.get('/users/me'),
+        api.get('/categories/tree')
+      ]);
+      
+      const studyYear = userRes.data.study_year;
+      let filteredCategories = catRes.data;
+      
+      if (studyYear) {
+        filteredCategories = catRes.data.filter((c: Category) => !c.target_year || c.target_year === studyYear);
+      }
+      
+      setCategories(filteredCategories);
     } catch {
-      toast.error('Failed to load categories');
+      toast.error('Failed to load dashboard data');
     } finally {
       setLoading(false);
     }
@@ -90,7 +103,8 @@ export default function QuizGeneratorPage() {
         category_ids: selectedTopics,
         question_count: questionCount,
         mode: selectedMode,
-        quiz_mode: quizMode
+        quiz_mode: quizMode,
+        quiz_name: quizName.trim() || undefined
       });
       router.push(`/student/quiz/session/${data.session_id}`);
     } catch (e: any) {
@@ -154,20 +168,30 @@ export default function QuizGeneratorPage() {
                 <button
                   key={block.id}
                   onClick={() => toggleBlock(block.id)}
-                  className={`relative p-4 rounded-xl border text-left transition-all ${
+                  className={`relative flex flex-col rounded-2xl border-2 text-left transition-all overflow-hidden h-48 group ${
                     isSelected 
-                      ? 'bg-emerald-500/10 border-emerald-500/50 shadow-lg shadow-emerald-500/10' 
-                      : 'bg-white/5 border-white/10 grayscale opacity-70 hover:grayscale-0 hover:opacity-100 hover:bg-white/10'
+                      ? 'border-indigo-500 shadow-xl shadow-indigo-500/20 ring-1 ring-indigo-500' 
+                      : 'border-transparent bg-slate-800/50 grayscale opacity-60 hover:grayscale-0 hover:opacity-100 hover:bg-slate-800'
                   }`}
                 >
-                  {isSelected && (
-                    <div className="absolute top-4 right-4 text-emerald-400">
-                      <CheckCircle className="w-5 h-5" />
+                  <div className="flex-1 w-full relative flex items-center justify-center bg-white/5 overflow-hidden">
+                    {block.icon?.startsWith('/') ? (
+                      <img src={`http://localhost:8000${block.icon}`} alt={block.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                    ) : (
+                      <div className="text-6xl drop-shadow-xl transition-transform duration-500 group-hover:scale-110">{block.icon}</div>
+                    )}
+                    {isSelected && (
+                      <div className="absolute top-3 right-3 bg-indigo-500 text-white rounded-full shadow-lg">
+                        <CheckCircle className="w-6 h-6" />
+                      </div>
+                    )}
+                  </div>
+                  <div className={`w-full px-4 py-3 flex items-center justify-between transition-colors ${isSelected ? 'bg-indigo-950 text-white' : 'bg-slate-900 text-gray-300'}`}>
+                    <h3 className="font-bold truncate text-[15px] flex-1 pr-2">{block.name}</h3>
+                    <div className={`text-xs font-bold px-2.5 py-1 rounded-full ${isSelected ? 'bg-indigo-500/20 text-indigo-300' : 'bg-slate-700 text-gray-400'}`}>
+                      {block.children?.reduce((sum, child) => sum + (availableCounts[child.id] || 0), 0) || 0}
                     </div>
-                  )}
-                  <div className="text-3xl mb-3">{block.icon}</div>
-                  <h3 className={`font-semibold ${isSelected ? 'text-white' : 'text-gray-300'}`}>{block.name}</h3>
-                  <p className="text-xs text-gray-500 mt-1">{block.children?.length || 0} topics</p>
+                  </div>
                 </button>
               );
             })}
@@ -221,21 +245,31 @@ export default function QuizGeneratorPage() {
                 <h2 className="text-lg font-semibold text-white mb-2">4. Settings</h2>
                 <p className="text-sm text-gray-400">Total available questions from selected topics: <span className="font-mono text-emerald-400 font-bold">{totalAvailable}</span></p>
              </div>
-             <div className="flex gap-4 w-full md:w-auto">
-                <div className="flex-1">
-                  <label className="block text-xs font-medium text-gray-400 mb-1">Question Count</label>
+             <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
+                <div className="flex-1 min-w-[200px]">
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Quiz Name (Optional)</label>
+                  <input 
+                    type="text" 
+                    value={quizName} 
+                    onChange={e => setQuizName(e.target.value)}
+                    placeholder="e.g. Midterm Prep"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2.5 text-white placeholder-slate-500 focus:ring-1 focus:ring-blue-500/50 focus:border-blue-500/50"
+                  />
+                </div>
+                <div className="w-24 shrink-0">
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Count</label>
                   <input 
                     type="number" 
                     value={questionCount} 
                     onChange={e => setQuestionCount(parseInt(e.target.value) || 1)}
                     min={1} 
                     max={totalAvailable || 100}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white focus:ring-1 focus:ring-blue-500/50 focus:border-blue-500/50"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:ring-1 focus:ring-blue-500/50 focus:border-blue-500/50"
                   />
                 </div>
-                <div className="flex-1">
-                  <label className="block text-xs font-medium text-gray-400 mb-2">Quiz Mode</label>
-                  <div className="flex flex-row gap-4">
+                <div className="w-48 shrink-0">
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Mode</label>
+                  <div className="flex flex-row gap-2">
                     <button
                       onClick={() => setQuizMode('practice')}
                       className={`flex-1 py-2 px-3 rounded-xl border text-sm text-center font-medium transition-all ${

@@ -7,6 +7,7 @@ class OverallProgress(BaseModel):
     correct_count: int
     incorrect_count: int
     accuracy_percentage: float
+    weak_points_count: int
 
 
 class CategoryProgress(BaseModel):
@@ -33,6 +34,8 @@ class RecentQuizSession(BaseModel):
     total_questions: int
     score_percentage: float
     created_at: str
+    quiz_name: Optional[str] = None
+    status: str
 
 class AnalyticsDashboardResponse(BaseModel):
     overall: OverallProgress

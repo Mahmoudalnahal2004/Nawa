@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import { toast } from 'sonner';
-import { Loader2, TrendingUp, TrendingDown, Target, CheckCircle2, XCircle, Clock, BookOpen, Timer } from 'lucide-react';
+import { Loader2, TrendingUp, TrendingDown, Target, CheckCircle2, XCircle, Clock, BookOpen, Timer, Edit2, Trash2, ShieldAlert, Bookmark } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 interface AnalyticsData {
@@ -29,13 +29,22 @@ interface AnalyticsData {
     total_questions: number;
     score_percentage: number;
     created_at: string;
+    quiz_name?: string;
+    status: string;
   }[];
 }
 
 export default function HistoryDashboard() {
   const router = useRouter();
   const [data, setData] = useState<AnalyticsData | null>(null);
+  const [bookmarksCount, setBookmarksCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [renameState, setRenameState] = useState<{isOpen: boolean; sessionId: string; currentName: string; newName: string; saving: boolean}>({
+    isOpen: false, sessionId: '', currentName: '', newName: '', saving: false
+  });
+  const [deleteState, setDeleteState] = useState<{isOpen: boolean; sessionId: string; deleting: boolean}>({
+    isOpen: false, sessionId: '', deleting: false
+  });
 
   useEffect(() => {
     loadAnalytics();
@@ -43,12 +52,71 @@ export default function HistoryDashboard() {
 
   const loadAnalytics = async () => {
     try {
-      const res = await api.get('/analytics/me');
+      const [res, bookmarksRes] = await Promise.all([
+        api.get('/analytics/me'),
+        api.get('/bookmarks?page_size=1')
+      ]);
       setData(res.data);
+      setBookmarksCount(bookmarksRes.data.total);
     } catch (err) {
       toast.error('Failed to load history and analytics');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const openRenameModal = (sessionId: string, currentName: string) => {
+    setRenameState({
+      isOpen: true,
+      sessionId,
+      currentName,
+      newName: currentName,
+      saving: false
+    });
+  };
+
+  const closeRenameModal = () => {
+    setRenameState(p => ({ ...p, isOpen: false }));
+  };
+
+  const submitRename = async () => {
+    const { sessionId, currentName, newName } = renameState;
+    if (!newName || newName.trim() === '' || newName.trim() === currentName) {
+      closeRenameModal();
+      return;
+    }
+    
+    setRenameState(p => ({ ...p, saving: true }));
+    try {
+      await api.patch(`/quiz/${sessionId}/rename`, { quiz_name: newName.trim() });
+      toast.success('Quiz renamed successfully');
+      loadAnalytics();
+      closeRenameModal();
+    } catch {
+      toast.error('Failed to rename quiz');
+      setRenameState(p => ({ ...p, saving: false }));
+    }
+  };
+
+  const openDeleteModal = (sessionId: string) => {
+    setDeleteState({ isOpen: true, sessionId, deleting: false });
+  };
+
+  const closeDeleteModal = () => {
+    setDeleteState(p => ({ ...p, isOpen: false }));
+  };
+
+  const submitDelete = async () => {
+    const { sessionId } = deleteState;
+    setDeleteState(p => ({ ...p, deleting: true }));
+    try {
+      await api.delete(`/quiz/${sessionId}`);
+      toast.success('Quiz deleted successfully');
+      loadAnalytics();
+      closeDeleteModal();
+    } catch {
+      toast.error('Failed to delete quiz');
+      setDeleteState(p => ({ ...p, deleting: false }));
     }
   };
 
@@ -62,10 +130,18 @@ export default function HistoryDashboard() {
 
   if (!data) return null;
 
-  // Calculate Strongest/Weakest modules (minimum 3 questions answered to count)
-  const activeCategories = data.categories.filter(c => c.answered_count >= 3).sort((a, b) => b.accuracy_percentage - a.accuracy_percentage);
-  const strongest = activeCategories.slice(0, 3);
-  const weakest = [...activeCategories].reverse().slice(0, 3);
+  // Calculate Strongest/Weakest modules (minimum 1 question answered to count)
+  const activeCategories = data.categories.filter(c => c.answered_count >= 1).sort((a, b) => b.accuracy_percentage - a.accuracy_percentage);
+  
+  let strongest: typeof activeCategories = [];
+  let weakest: typeof activeCategories = [];
+
+  if (activeCategories.length > 0) {
+    const halfIndex = Math.ceil(activeCategories.length / 2);
+    strongest = activeCategories.slice(0, Math.min(3, halfIndex));
+    const remaining = activeCategories.slice(strongest.length);
+    weakest = [...remaining].reverse().slice(0, 3);
+  }
 
   return (
     <div className="space-y-8 animate-fade-in max-w-6xl mx-auto">
@@ -105,6 +181,40 @@ export default function HistoryDashboard() {
         </div>
       </div>
 
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Bookmarked Questions Card */}
+        <div className="glass-card p-6 flex flex-col justify-between bg-gradient-to-br from-slate-900 to-purple-950/20 border border-purple-500/10">
+          <div className="mb-6">
+            <h2 className="text-xl font-bold text-white flex items-center gap-2 mb-2">
+              <Bookmark className="w-5 h-5 text-purple-400" /> Bookmarked Questions
+            </h2>
+            <p className="text-sm text-gray-400">Review your saved questions and study them like flashcards. <span className="text-purple-400 font-bold ml-1 border border-purple-500/20 bg-purple-500/10 px-2 py-0.5 rounded-md">({bookmarksCount} saved)</span></p>
+          </div>
+          <button 
+            onClick={() => router.push('/student/bookmarks')} 
+            className="w-full py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-[0.98] bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-500/30 border border-purple-400/30"
+          >
+            Review Bookmarks
+          </button>
+        </div>
+
+        {/* Incorrect Answers Card */}
+        <div className="glass-card p-6 flex flex-col justify-between bg-gradient-to-br from-slate-900 to-rose-950/20 border border-rose-500/10">
+          <div className="mb-6">
+            <h2 className="text-xl font-bold text-white flex items-center gap-2 mb-2">
+              <XCircle className="w-5 h-5 text-rose-400" /> Incorrect Answers
+            </h2>
+            <p className="text-sm text-gray-400">Review questions you've answered incorrectly to improve your weak points. <span className="text-rose-400 font-bold ml-1 border border-rose-500/20 bg-rose-500/10 px-2 py-0.5 rounded-md">({data.overall.weak_points_count || 0} questions)</span></p>
+          </div>
+          <button 
+            onClick={() => router.push('/student/incorrect')} 
+            className="w-full py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-[0.98] bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-500/30 border border-rose-400/30"
+          >
+            Review Incorrect Answers
+          </button>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Strongest Modules */}
         <div className="glass-card p-6">
@@ -118,7 +228,14 @@ export default function HistoryDashboard() {
               {strongest.map(cat => (
                 <div key={cat.category_id} className="space-y-2">
                   <div className="flex justify-between text-sm">
-                    <span className="text-white font-medium">{cat.category_icon} {cat.category_name}</span>
+                    <span className="text-white font-medium flex items-center gap-1.5">
+                      {cat.category_icon?.startsWith('/') ? (
+                        <img src={`http://localhost:8000${cat.category_icon}`} alt={cat.category_name} className="w-4 h-4 object-contain inline-block" />
+                      ) : (
+                        cat.category_icon
+                      )}
+                      {cat.category_name}
+                    </span>
                     <span className="text-emerald-400 font-bold">{cat.accuracy_percentage}%</span>
                   </div>
                   <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden">
@@ -142,7 +259,14 @@ export default function HistoryDashboard() {
               {weakest.map(cat => (
                 <div key={cat.category_id} className="space-y-2">
                   <div className="flex justify-between text-sm">
-                    <span className="text-white font-medium">{cat.category_icon} {cat.category_name}</span>
+                    <span className="text-white font-medium flex items-center gap-1.5">
+                      {cat.category_icon?.startsWith('/') ? (
+                        <img src={`http://localhost:8000${cat.category_icon}`} alt={cat.category_name} className="w-4 h-4 object-contain inline-block" />
+                      ) : (
+                        cat.category_icon
+                      )}
+                      {cat.category_name}
+                    </span>
                     <span className="text-rose-400 font-bold">{cat.accuracy_percentage}%</span>
                   </div>
                   <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden">
@@ -184,7 +308,7 @@ export default function HistoryDashboard() {
                     <td className="py-4 px-4 text-sm text-gray-300">
                       {new Date(session.created_at).toLocaleDateString()} {new Date(session.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                     </td>
-                    <td className="py-4 px-4 text-sm font-medium text-white">{session.category_name}</td>
+                    <td className="py-4 px-4 text-sm font-medium text-white">{session.quiz_name || session.category_name}</td>
                     <td className="py-4 px-4 text-sm">
                       {session.mode === 'practice' ? (
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-semibold border border-emerald-500/20">
@@ -203,9 +327,23 @@ export default function HistoryDashboard() {
                       </span>
                     </td>
                     <td className="py-4 px-4 text-right">
-                      <button onClick={() => router.push(`/student/quiz/session/${session.session_id}`)} className="text-xs font-semibold text-blue-400 hover:text-blue-300 bg-blue-500/10 hover:bg-blue-500/20 px-3 py-1.5 rounded-lg transition-colors">
-                        Review
-                      </button>
+                      <div className="flex items-center justify-end gap-2">
+                        {session.status === 'in_progress' ? (
+                          <button onClick={() => router.push(`/student/quiz/session/${session.session_id}`)} className="text-xs font-semibold text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 px-3 py-1.5 rounded-lg transition-colors">
+                            Resume
+                          </button>
+                        ) : (
+                          <button onClick={() => router.push(`/student/history/review/${session.session_id}`)} className="text-xs font-semibold text-blue-400 hover:text-blue-300 bg-blue-500/10 hover:bg-blue-500/20 px-3 py-1.5 rounded-lg transition-colors">
+                            Review
+                          </button>
+                        )}
+                        <button onClick={() => openRenameModal(session.session_id, session.quiz_name || session.category_name)} className="p-1.5 text-gray-400 hover:text-amber-400 bg-white/5 hover:bg-amber-500/10 rounded-lg transition-colors" title="Rename Quiz">
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => openDeleteModal(session.session_id)} className="p-1.5 text-gray-400 hover:text-rose-400 bg-white/5 hover:bg-rose-500/10 rounded-lg transition-colors" title="Delete Quiz">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -214,6 +352,81 @@ export default function HistoryDashboard() {
           </div>
         )}
       </div>
+
+      {/* Rename Modal */}
+      {renameState.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-6 shadow-2xl animate-slide-up relative mx-4">
+            <h3 className="text-xl font-bold text-white mb-2">Rename Quiz</h3>
+            <p className="text-sm text-gray-400 mb-6">Enter a new name for this quiz session.</p>
+            
+            <input 
+              type="text" 
+              autoFocus
+              value={renameState.newName} 
+              onChange={e => {
+                const val = e.target.value;
+                setRenameState(p => ({ ...p, newName: val }));
+              }}
+              placeholder="e.g. Midterm Prep"
+              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50 mb-6"
+              onKeyDown={e => {
+                if (e.key === 'Enter') submitRename();
+                if (e.key === 'Escape') closeRenameModal();
+              }}
+            />
+            
+            <div className="flex justify-end gap-3">
+              <button 
+                onClick={closeRenameModal}
+                className="px-5 py-2.5 rounded-xl font-medium text-gray-400 hover:text-white hover:bg-white/5 transition-colors border border-transparent"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={submitRename}
+                disabled={renameState.saving}
+                className="px-5 py-2.5 rounded-xl font-medium text-amber-950 bg-amber-400 hover:bg-amber-300 transition-colors shadow-lg shadow-amber-500/20 flex items-center gap-2 disabled:opacity-50"
+              >
+                {renameState.saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Edit2 className="w-4 h-4" />}
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Modal */}
+      {deleteState.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-6 shadow-2xl animate-slide-up relative mx-4">
+            <div className="flex items-center gap-3 mb-2 text-rose-500">
+              <ShieldAlert className="w-6 h-6" />
+              <h3 className="text-xl font-bold text-white">Delete Quiz</h3>
+            </div>
+            <p className="text-sm text-gray-400 mb-6 leading-relaxed">
+              Are you sure you want to delete this quiz? Your progress for these questions will be completely reset and this action cannot be undone.
+            </p>
+            
+            <div className="flex justify-end gap-3">
+              <button 
+                onClick={closeDeleteModal}
+                className="px-5 py-2.5 rounded-xl font-medium text-gray-400 hover:text-white hover:bg-white/5 transition-colors border border-transparent"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={submitDelete}
+                disabled={deleteState.deleting}
+                className="px-5 py-2.5 rounded-xl font-medium text-white bg-rose-500 hover:bg-rose-400 transition-colors shadow-lg shadow-rose-500/20 flex items-center gap-2 disabled:opacity-50"
+              >
+                {deleteState.deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                Delete Quiz
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -19,6 +19,11 @@ class UserToggleActive(BaseModel):
     is_active: bool
 
 
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
 class ProfileUpdate(BaseModel):
     full_name: Optional[str] = None
     university: Optional[str] = None

@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 from app.core.deps import get_db, RoleChecker, get_current_active_user
 from app.models.user import User
-from app.schemas.user import UserListResponse, UserToggleActive, ProfileUpdate, ProfileResponse
+from app.schemas.user import UserListResponse, UserToggleActive, ProfileUpdate, ProfileResponse, ChangePasswordRequest
 from app.services import user_service
 
 router = APIRouter(prefix="/users", tags=["User Management"])
@@ -42,3 +42,16 @@ async def update_my_profile(
     if updated is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return ProfileResponse.model_validate(updated)
+
+
+@router.post("/me/change-password")
+async def change_password(
+    data: ChangePasswordRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_active_user),
+):
+    """Change the current user's password."""
+    success = await user_service.change_password(db, user.id, data.current_password, data.new_password)
+    if not success:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Incorrect current password")
+    return {"detail": "Password changed successfully"}

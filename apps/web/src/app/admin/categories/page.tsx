@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import { toast } from 'sonner';
-import { Loader2, Plus, Pencil, Trash2, FolderTree, CornerDownRight, X, LayoutTemplate } from 'lucide-react';
+import { Loader2, Plus, Pencil, Trash2, FolderTree, CornerDownRight, X, LayoutTemplate, Image as ImageIcon, Upload } from 'lucide-react';
 
 interface Category {
   id: number;
@@ -11,6 +11,7 @@ interface Category {
   description: string;
   icon: string;
   parent_id: number | null;
+  target_year?: number | null;
   question_count: number;
   children?: Category[];
 }
@@ -27,10 +28,13 @@ export default function AdminCategoriesPage() {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    icon: '📚',
+    icon: '',
     parent_id: '' as string | number,
+    target_year: '' as string | number,
   });
   const [saving, setSaving] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [yearFilter, setYearFilter] = useState<string>('All');
 
   useEffect(() => {
     fetchCategories();
@@ -49,7 +53,7 @@ export default function AdminCategoriesPage() {
 
   const openAddModal = () => {
     setEditingCategory(null);
-    setFormData({ name: '', description: '', icon: '📚', parent_id: '' });
+    setFormData({ name: '', description: '', icon: '', parent_id: '', target_year: '' });
     setIsModalOpen(true);
   };
 
@@ -60,6 +64,7 @@ export default function AdminCategoriesPage() {
       description: cat.description,
       icon: cat.icon,
       parent_id: cat.parent_id || '',
+      target_year: cat.target_year || '',
     });
     setIsModalOpen(true);
   };
@@ -84,6 +89,7 @@ export default function AdminCategoriesPage() {
         description: formData.description,
         icon: formData.icon,
         parent_id: formData.parent_id === '' ? null : Number(formData.parent_id),
+        target_year: formData.target_year === '' ? null : Number(formData.target_year),
       };
 
       if (editingCategory) {
@@ -103,6 +109,28 @@ export default function AdminCategoriesPage() {
     }
   };
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingImage(true);
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      // Reusing the questions upload endpoint since it handles generic image uploads
+      const { data } = await api.post('/questions/upload-image', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      setFormData(prev => ({ ...prev, icon: data.url }));
+      toast.success('Image uploaded successfully');
+    } catch (err: any) {
+      toast.error('Failed to upload image');
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
@@ -118,9 +146,27 @@ export default function AdminCategoriesPage() {
           <h1 className="text-2xl font-bold text-white mb-1">Category Management</h1>
           <p className="text-gray-400 text-sm">Organize the curriculum hierarchy for the platform.</p>
         </div>
-        <button onClick={openAddModal} className="btn-primary flex items-center gap-2">
-          <Plus className="w-4 h-4" /> Add Category
-        </button>
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <select
+              value={yearFilter}
+              onChange={(e) => setYearFilter(e.target.value)}
+              className="bg-slate-900 border border-white/10 text-gray-300 text-sm rounded-xl px-4 py-2.5 focus:outline-none focus:border-emerald-500 appearance-none min-w-[140px] cursor-pointer"
+            >
+              <option value="All">All Years</option>
+              <option value="Global">Global (No Year)</option>
+              {[1, 2, 3, 4, 5].map(y => (
+                <option key={y} value={y}>Year {y}</option>
+              ))}
+            </select>
+            <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-gray-500">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+            </div>
+          </div>
+          <button onClick={openAddModal} className="btn-primary flex items-center gap-2">
+            <Plus className="w-4 h-4" /> Add Category
+          </button>
+        </div>
       </div>
 
       <div className="glass-card overflow-hidden">
@@ -131,17 +177,30 @@ export default function AdminCategoriesPage() {
           </div>
         ) : (
           <div className="divide-y divide-white/5">
-            {categories.map((module) => (
+            {categories.filter(c => {
+              if (yearFilter === 'All') return true;
+              if (yearFilter === 'Global') return !c.target_year;
+              return c.target_year === parseInt(yearFilter);
+            }).map((module) => (
               <div key={module.id} className="p-4 hover:bg-white/5 transition-colors group">
                 {/* Top-Level Module Row */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center border border-blue-500/20 text-2xl">
-                      {module.icon}
+                    <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center border border-blue-500/20 overflow-hidden text-2xl">
+                      {module.icon?.startsWith('/') ? (
+                        <img src={`http://localhost:8000${module.icon}`} alt={module.name} className="w-full h-full object-cover" />
+                      ) : (
+                        module.icon || <ImageIcon className="w-5 h-5 text-blue-400" />
+                      )}
                     </div>
                     <div>
                       <h3 className="text-white font-semibold flex items-center gap-2">
                         {module.name}
+                        {module.target_year && (
+                          <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/20">
+                            Year {module.target_year}
+                          </span>
+                        )}
                         <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-white/10 text-gray-400">
                           ID: {module.id}
                         </span>
@@ -169,7 +228,14 @@ export default function AdminCategoriesPage() {
                         <div className="flex items-center gap-3">
                           <CornerDownRight className="w-4 h-4 text-gray-600" />
                           <div>
-                            <p className="text-sm font-medium text-gray-200">{sub.name}</p>
+                            <p className="text-sm font-medium text-gray-200 flex items-center gap-2">
+                              {sub.name}
+                              {sub.target_year && (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                  Year {sub.target_year}
+                                </span>
+                              )}
+                            </p>
                             <p className="text-xs text-gray-500">{sub.description || 'No description'} • {sub.question_count || 0} Questions</p>
                           </div>
                         </div>
@@ -228,15 +294,46 @@ export default function AdminCategoriesPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-gray-400 mb-1">Emoji Icon</label>
-                  <input
-                    type="text"
-                    value={formData.icon}
-                    onChange={e => setFormData({ ...formData, icon: e.target.value })}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500 text-center text-xl"
-                  />
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Module Image</label>
+                  <div className="relative w-full h-10 bg-slate-950 border border-slate-800 rounded-xl flex items-center overflow-hidden">
+                    {formData.icon?.startsWith('/') ? (
+                      <div className="w-full h-full flex items-center justify-between px-3 group">
+                        <img src={`http://localhost:8000${formData.icon}`} alt="Preview" className="h-6 w-6 object-cover rounded" />
+                        <button type="button" onClick={() => setFormData(p => ({ ...p, icon: '' }))} className="text-gray-500 hover:text-rose-400">
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ) : formData.icon ? (
+                      <div className="w-full h-full flex items-center justify-between px-3">
+                        <span className="text-xl">{formData.icon}</span>
+                        <button type="button" onClick={() => setFormData(p => ({ ...p, icon: '' }))} className="text-gray-500 hover:text-rose-400">
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <label className="w-full h-full flex items-center justify-center gap-2 text-sm text-gray-400 cursor-pointer hover:bg-white/5 transition-colors">
+                        {uploadingImage ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                        {uploadingImage ? 'Uploading...' : 'Upload'}
+                        <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+                      </label>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Study Year</label>
+                  <select
+                    value={formData.target_year}
+                    onChange={e => setFormData({ ...formData, target_year: e.target.value })}
+                    disabled={!!formData.parent_id}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500 appearance-none disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <option value="">-- All Years --</option>
+                    {[1, 2, 3, 4, 5].map(y => (
+                      <option key={y} value={y}>Year {y}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-400 mb-1">Parent Module</label>

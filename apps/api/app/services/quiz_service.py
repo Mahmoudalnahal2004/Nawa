@@ -1,14 +1,17 @@
 import random
 import uuid
 from typing import Dict, List, Tuple
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
+from datetime import datetime, timezone
+
 from app.models.question import Question, QuestionStatus
 from app.models.category import Category
 from app.models.user_progress import UserProgress
+from app.models.quiz_session import QuizSession
 from app.schemas.quiz import QuizQuestion, QuizSessionResponse, AnswerFeedback, QuizResultSummary
-
-_quiz_sessions: Dict[str, dict] = {}
+from app.schemas.analytics import RecentQuizSession
 
 
 def _shuffle_options(question: Question) -> Tuple[dict, str]:
@@ -32,11 +35,23 @@ def _shuffle_options(question: Question) -> Tuple[dict, str]:
     return shuffled, new_correct
 
 
-async def start_quiz(db: AsyncSession, user_id: int, category_id: int, num_questions: int, mode: str = "practice") -> QuizSessionResponse:
+async def start_quiz(db: AsyncSession, user_id: int, category_id: int, num_questions: int, mode: str = "practice", quiz_name: str | None = None) -> QuizSessionResponse:
+    if num_questions > 150:
+        raise ValueError("Cannot request more than 150 questions")
+
     cat_result = await db.execute(select(Category).where(Category.id == category_id))
     category = cat_result.scalar_one_or_none()
     if category is None:
         raise ValueError("Category not found")
+
+    count_query = select(func.count(Question.id)).where(
+        Question.category_id == category_id, 
+        Question.status == QuestionStatus.PUBLISHED
+    )
+    available_count = await db.scalar(count_query) or 0
+    if num_questions > available_count:
+        raise ValueError(f"Requested {num_questions} questions but only {available_count} are available")
+
     result = await db.execute(
         select(Question).where(Question.category_id == category_id, Question.status == QuestionStatus.PUBLISHED)
         .order_by(func.random()).limit(num_questions)
@@ -45,62 +60,87 @@ async def start_quiz(db: AsyncSession, user_id: int, category_id: int, num_quest
     if len(questions) == 0:
         raise ValueError("No published questions available in this category")
     random.shuffle(questions)
+    
     session_id = str(uuid.uuid4())
     quiz_questions = []
     answer_key = {}
+    
     for q in questions:
         shuffled_opts, new_correct = _shuffle_options(q)
-        answer_key[q.id] = {"correct_answer": new_correct, "explanation": q.explanation}
-        quiz_questions.append(QuizQuestion(
-            id=q.id, question_text=q.question_text, image_url=q.image_url,
-            option_a=shuffled_opts["option_a"], option_b=shuffled_opts["option_b"],
-            option_c=shuffled_opts["option_c"], option_d=shuffled_opts["option_d"],
-            option_e=shuffled_opts.get("option_e"),
-        ))
-    from datetime import datetime, timezone
-    _quiz_sessions[session_id] = {
-        "user_id": user_id, "category_id": category_id, "category_name": category.name,
-        "mode": mode, "questions": quiz_questions, "answer_key": answer_key, "answers": [],
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "status": "in_progress", "current_question_index": 0
-    }
+        answer_key[str(q.id)] = {"correct_answer": new_correct, "explanation": q.explanation} # using str because json keys are strings
+        quiz_questions.append({
+            "id": q.id, "question_text": q.question_text, "image_url": q.image_url,
+            "option_a": shuffled_opts["option_a"], "option_b": shuffled_opts["option_b"],
+            "option_c": shuffled_opts["option_c"], "option_d": shuffled_opts["option_d"],
+            "option_e": shuffled_opts.get("option_e"),
+        })
+
+    db_session = QuizSession(
+        id=session_id,
+        user_id=user_id,
+        category_id=category_id,
+        category_name=category.name,
+        quiz_name=quiz_name or category.name,
+        mode=mode,
+        questions=quiz_questions,
+        answer_key=answer_key,
+        answers=[],
+        exam_answers={},
+        flagged_questions={},
+        status="in_progress",
+        current_question_index=0
+    )
+    db.add(db_session)
+    await db.commit()
+    
+    # map to pydantic model
+    q_objects = [QuizQuestion(**q) for q in quiz_questions]
     return QuizSessionResponse(
-        session_id=session_id, mode=mode, questions=quiz_questions, 
+        session_id=session_id, mode=mode, questions=q_objects, 
         total_questions=len(quiz_questions), category_name=category.name,
+        quiz_name=quiz_name or category.name,
         status="in_progress", current_question_index=0
     )
 
 
 async def submit_answer(db: AsyncSession, session_id: str, user_id: int, question_id: int, selected_answer: str) -> AnswerFeedback:
-    session = _quiz_sessions.get(session_id)
-    if session is None:
+    db_session = await db.get(QuizSession, session_id)
+    if db_session is None:
         raise ValueError("Quiz session not found")
-    if session["user_id"] != user_id:
+    if db_session.user_id != user_id:
         raise ValueError("Not your quiz session")
-    key = session["answer_key"].get(question_id)
+        
+    key = db_session.answer_key.get(str(question_id))
     if key is None:
         raise ValueError("Question not in this quiz session")
+        
     selected = selected_answer.upper()
     correct = key["correct_answer"]
     is_correct = selected == correct
+    
     feedback = AnswerFeedback(question_id=question_id, selected_answer=selected, correct_answer=correct, is_correct=is_correct, explanation=key["explanation"])
-    session["answers"].append(feedback)
+    
+    db_session.answers.append(feedback.model_dump())
+    flag_modified(db_session, "answers")
+    
     progress = UserProgress(user_id=user_id, question_id=question_id, selected_answer=selected, is_correct=is_correct)
     db.add(progress)
-    await db.flush()
+    
+    await db.commit()
     return feedback
 
 
 async def submit_batch_answers(db: AsyncSession, session_id: str, user_id: int, answers: list) -> list[AnswerFeedback]:
-    session = _quiz_sessions.get(session_id)
-    if session is None:
+    db_session = await db.get(QuizSession, session_id)
+    if db_session is None:
         raise ValueError("Quiz session not found")
-    if session["user_id"] != user_id:
+    if db_session.user_id != user_id:
         raise ValueError("Not your quiz session")
     
     feedbacks = []
+    
     for ans in answers:
-        key = session["answer_key"].get(ans.question_id)
+        key = db_session.answer_key.get(str(ans.question_id))
         if key is None:
             continue
         selected = ans.selected_answer.upper()
@@ -109,85 +149,113 @@ async def submit_batch_answers(db: AsyncSession, session_id: str, user_id: int, 
         feedback = AnswerFeedback(question_id=ans.question_id, selected_answer=selected, correct_answer=correct, is_correct=is_correct, explanation=key["explanation"])
         feedbacks.append(feedback)
         
-        # Check if already answered in session to avoid duplicates
-        if not any(a.question_id == ans.question_id for a in session["answers"]):
-            session["answers"].append(feedback)
+        # Check if already answered
+        if not any(a["question_id"] == ans.question_id for a in db_session.answers):
+            db_session.answers.append(feedback.model_dump())
             progress = UserProgress(user_id=user_id, question_id=ans.question_id, selected_answer=selected, is_correct=is_correct)
             db.add(progress)
             
-    await db.flush()
+    flag_modified(db_session, "answers")
+    await db.commit()
     return feedbacks
 
 
-async def pause_quiz(session_id: str, user_id: int, current_question_index: int) -> dict:
-    session = _quiz_sessions.get(session_id)
-    if session is None:
+async def pause_quiz(db: AsyncSession, session_id: str, user_id: int, request) -> dict:
+    db_session = await db.get(QuizSession, session_id)
+    if db_session is None:
         raise ValueError("Quiz session not found")
-    if session["user_id"] != user_id:
+    if db_session.user_id != user_id:
         raise ValueError("Not your quiz session")
     
-    session["current_question_index"] = current_question_index
-    session["status"] = "in_progress"
+    db_session.current_question_index = request.current_question_index
+    if request.exam_answers is not None:
+        db_session.exam_answers = request.exam_answers
+        flag_modified(db_session, "exam_answers")
+    if request.flagged_questions is not None:
+        db_session.flagged_questions = request.flagged_questions
+        flag_modified(db_session, "flagged_questions")
+        
+    db_session.status = "in_progress"
     
-    return {"message": "Session paused successfully", "current_question_index": current_question_index}
+    await db.commit()
+    return {"message": "Session paused successfully", "current_question_index": request.current_question_index}
 
 
-async def submit_exam(session_id: str, user_id: int) -> dict:
-    session = _quiz_sessions.get(session_id)
-    if session is None:
+async def submit_exam(db: AsyncSession, session_id: str, user_id: int) -> dict:
+    db_session = await db.get(QuizSession, session_id)
+    if db_session is None:
         raise ValueError("Quiz session not found")
-    if session["user_id"] != user_id:
+    if db_session.user_id != user_id:
         raise ValueError("Not your quiz session")
         
-    session["status"] = "completed"
+    db_session.status = "completed"
     
-    total = len(session["questions"])
-    correct = sum(1 for a in session["answers"] if a.is_correct)
+    total = len(db_session.questions)
+    correct = sum(1 for a in db_session.answers if a["is_correct"])
     score = (correct / total * 100) if total > 0 else 0
     
+    await db.commit()
     return {"message": "Quiz submitted successfully", "score_percentage": round(score, 1), "status": "completed"}
 
 
-async def get_quiz_results(session_id: str, user_id: int) -> QuizResultSummary:
-    session = _quiz_sessions.get(session_id)
-    if session is None:
+async def get_quiz_results(db: AsyncSession, session_id: str, user_id: int) -> QuizResultSummary:
+    db_session = await db.get(QuizSession, session_id)
+    if db_session is None:
         raise ValueError("Quiz session not found")
-    if session["user_id"] != user_id:
+    if db_session.user_id != user_id:
         raise ValueError("Not your quiz session")
-    answers = session["answers"]
-    total = len(session["questions"])
+        
+    answers = [AnswerFeedback(**a) for a in db_session.answers]
+    total = len(db_session.questions)
     correct = sum(1 for a in answers if a.is_correct)
     score = (correct / total * 100) if total > 0 else 0
+    
     return QuizResultSummary(session_id=session_id, total_questions=total, correct_count=correct, incorrect_count=total - correct, score_percentage=round(score, 1), answers=answers)
 
 
-def get_quiz_session(session_id: str) -> dict | None:
-    return _quiz_sessions.get(session_id)
+async def get_quiz_session(db: AsyncSession, session_id: str) -> dict | None:
+    db_session = await db.get(QuizSession, session_id)
+    if db_session is None:
+        return None
+        
+    return {
+        "user_id": db_session.user_id,
+        "category_id": db_session.category_id,
+        "category_name": db_session.category_name,
+        "quiz_name": db_session.quiz_name,
+        "mode": db_session.mode,
+        "questions": [QuizQuestion(**q) for q in db_session.questions],
+        "answer_key": db_session.answer_key, # dictionary string keys are fine
+        "answers": [AnswerFeedback(**a) for a in db_session.answers],
+        "exam_answers": db_session.exam_answers,
+        "flagged_questions": db_session.flagged_questions,
+        "created_at": db_session.created_at.isoformat() if db_session.created_at else None,
+        "status": db_session.status,
+        "current_question_index": db_session.current_question_index
+    }
 
 
-def get_recent_sessions(user_id: int) -> list:
-    from app.schemas.analytics import RecentQuizSession
+async def get_recent_sessions(db: AsyncSession, user_id: int) -> list:
+    query = select(QuizSession).where(QuizSession.user_id == user_id).order_by(QuizSession.created_at.desc()).limit(10)
+    result = await db.execute(query)
     sessions = []
-    for sid, s in _quiz_sessions.items():
-        if s.get("user_id") == user_id:
-            total = len(s["questions"])
-            correct = sum(1 for a in s["answers"] if a.is_correct)
-            score = (correct / total * 100) if total > 0 else 0
-            created_at = s.get("created_at")
-            if not created_at:
-                from datetime import datetime, timezone
-                created_at = datetime.now(timezone.utc).isoformat()
-            sessions.append(RecentQuizSession(
-                session_id=sid,
-                category_name=s["category_name"],
-                mode=s.get("mode", "practice"),
-                total_questions=total,
-                score_percentage=round(score, 1),
-                created_at=created_at
-            ))
-    # Sort by created_at descending
-    sessions.sort(key=lambda x: x.created_at, reverse=True)
-    return sessions[:10]
+    
+    for s in result.scalars().all():
+        total = len(s.questions)
+        correct = sum(1 for a in s.answers if a["is_correct"])
+        score = (correct / total * 100) if total > 0 else 0
+        
+        sessions.append(RecentQuizSession(
+            session_id=s.id,
+            category_name=s.category_name,
+            mode=s.mode,
+            total_questions=total,
+            score_percentage=round(score, 1),
+            created_at=s.created_at.isoformat() if s.created_at else datetime.now(timezone.utc).isoformat(),
+            quiz_name=s.quiz_name or s.category_name,
+            status=s.status
+        ))
+    return sessions
 
 
 async def get_quiz_availability(db: AsyncSession, user_id: int, mode: str) -> dict[int, int]:
@@ -214,19 +282,27 @@ async def get_quiz_availability(db: AsyncSession, user_id: int, mode: str) -> di
 async def generate_custom_quiz(db: AsyncSession, user_id: int, request) -> QuizSessionResponse:
     from app.models.bookmark import Bookmark
     
-    query = select(Question).where(
+    if request.question_count > 150:
+        raise ValueError("Cannot request more than 150 questions")
+
+    conds = [
         Question.category_id.in_(request.category_ids),
         Question.status == QuestionStatus.PUBLISHED
-    )
+    ]
     
     if request.mode == "Unused":
-        query = query.where(~Question.id.in_(select(UserProgress.question_id).where(UserProgress.user_id == user_id)))
+        conds.append(~Question.id.in_(select(UserProgress.question_id).where(UserProgress.user_id == user_id)))
     elif request.mode == "Incorrect":
-        query = query.where(Question.id.in_(select(UserProgress.question_id).where(UserProgress.user_id == user_id, UserProgress.is_correct == False)))
+        conds.append(Question.id.in_(select(UserProgress.question_id).where(UserProgress.user_id == user_id, UserProgress.is_correct == False)))
     elif request.mode == "Bookmarked":
-        query = query.where(Question.id.in_(select(Bookmark.question_id).where(Bookmark.user_id == user_id)))
+        conds.append(Question.id.in_(select(Bookmark.question_id).where(Bookmark.user_id == user_id)))
         
-    query = query.order_by(func.random()).limit(request.question_count)
+    count_query = select(func.count(Question.id)).where(*conds)
+    available_count = await db.scalar(count_query) or 0
+    if request.question_count > available_count:
+        raise ValueError(f"Requested {request.question_count} questions but only {available_count} are available")
+
+    query = select(Question).where(*conds).order_by(func.random()).limit(request.question_count)
     result = await db.execute(query)
     questions = list(result.scalars().all())
     
@@ -240,25 +316,77 @@ async def generate_custom_quiz(db: AsyncSession, user_id: int, request) -> QuizS
     
     for q in questions:
         shuffled_opts, new_correct = _shuffle_options(q)
-        answer_key[q.id] = {"correct_answer": new_correct, "explanation": q.explanation}
-        quiz_questions.append(QuizQuestion(
-            id=q.id, question_text=q.question_text, image_url=q.image_url,
-            option_a=shuffled_opts["option_a"], option_b=shuffled_opts["option_b"],
-            option_c=shuffled_opts["option_c"], option_d=shuffled_opts["option_d"],
-            option_e=shuffled_opts.get("option_e"),
-        ))
+        answer_key[str(q.id)] = {"correct_answer": new_correct, "explanation": q.explanation}
+        quiz_questions.append({
+            "id": q.id, "question_text": q.question_text, "image_url": q.image_url,
+            "option_a": shuffled_opts["option_a"], "option_b": shuffled_opts["option_b"],
+            "option_c": shuffled_opts["option_c"], "option_d": shuffled_opts["option_d"],
+            "option_e": shuffled_opts.get("option_e"),
+        })
         
-    from datetime import datetime, timezone
-    _quiz_sessions[session_id] = {
-        "user_id": user_id, "category_id": 0, "category_name": "Custom Generated Quiz",
-        "mode": request.quiz_mode, "questions": quiz_questions, "answer_key": answer_key, "answers": [],
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "status": "in_progress", "current_question_index": 0
-    }
+    db_session = QuizSession(
+        id=session_id,
+        user_id=user_id,
+        category_id=0,
+        category_name="Custom Generated Quiz",
+        quiz_name=request.quiz_name or "Custom Generated Quiz",
+        mode=request.quiz_mode,
+        questions=quiz_questions,
+        answer_key=answer_key,
+        answers=[],
+        exam_answers={},
+        flagged_questions={},
+        status="in_progress",
+        current_question_index=0
+    )
+    db.add(db_session)
+    await db.commit()
     
+    q_objects = [QuizQuestion(**q) for q in quiz_questions]
     return QuizSessionResponse(
         session_id=session_id, mode=request.quiz_mode, 
-        questions=quiz_questions, total_questions=len(quiz_questions), 
+        questions=q_objects, total_questions=len(quiz_questions), 
         category_name="Custom Generated Quiz",
+        quiz_name=request.quiz_name or "Custom Generated Quiz",
         status="in_progress", current_question_index=0
     )
+
+
+async def rename_quiz_session(db: AsyncSession, session_id: str, user_id: int, new_name: str) -> dict:
+    db_session = await db.get(QuizSession, session_id)
+    if db_session is None:
+        raise ValueError("Quiz session not found")
+    if db_session.user_id != user_id:
+        raise ValueError("Not your quiz session")
+    
+    db_session.quiz_name = new_name
+    await db.commit()
+    return {"message": "Quiz renamed successfully", "quiz_name": new_name}
+
+
+async def delete_quiz_session(db: AsyncSession, session_id: str, user_id: int) -> dict:
+    db_session = await db.get(QuizSession, session_id)
+    if db_session is None:
+        raise ValueError("Quiz session not found")
+    if db_session.user_id != user_id:
+        raise ValueError("Not your quiz session")
+        
+    question_ids = [a["question_id"] for a in db_session.answers]
+    
+    if question_ids:
+        await db.execute(
+            delete(UserProgress).where(
+                UserProgress.user_id == user_id,
+                UserProgress.question_id.in_(question_ids)
+            )
+        )
+        
+    await db.delete(db_session)
+    await db.commit()
+    return {"message": "Quiz session deleted successfully"}
+
+
+async def get_user_session_count(db: AsyncSession, user_id: int) -> int:
+    query = select(func.count(QuizSession.id)).where(QuizSession.user_id == user_id)
+    count = await db.scalar(query)
+    return count or 0

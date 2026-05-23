@@ -4,6 +4,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User, UserRole
+from app.core.security import verify_password, hash_password
 
 
 async def list_students(db: AsyncSession) -> List[User]:
@@ -45,6 +46,20 @@ async def update_profile(db: AsyncSession, user_id: int, full_name: str | None, 
     await db.flush()
     await db.refresh(user)
     return user
+
+
+async def change_password(db: AsyncSession, user_id: int, current_password: str, new_password: str) -> bool:
+    """Change a user's password."""
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if user is None:
+        return False
+    if not verify_password(current_password, user.hashed_password):
+        return False
+    
+    user.hashed_password = hash_password(new_password)
+    await db.flush()
+    return True
 
 
 async def get_student_count(db: AsyncSession) -> int:

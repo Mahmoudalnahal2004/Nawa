@@ -34,10 +34,16 @@ export default function LeaderboardPage() {
   const loadCategories = async () => {
     try {
       const { data } = await api.get('/analytics/by-category');
-      setCategories(data);
-      if (data.length > 0) {
-        setSelectedCategory(data[0].category_id);
-        await fetchLeaderboard(data[0].category_id);
+      const allCategory: Category = {
+        category_id: 0,
+        category_name: 'All Modules',
+        category_icon: '🌍'
+      };
+      const categoriesWithAll = [allCategory, ...data];
+      setCategories(categoriesWithAll);
+      if (categoriesWithAll.length > 0) {
+        setSelectedCategory(categoriesWithAll[0].category_id);
+        await fetchLeaderboard(categoriesWithAll[0].category_id);
       }
     } catch {
       toast.error('Failed to load modules');
@@ -115,7 +121,13 @@ export default function LeaderboardPage() {
                   : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10 hover:text-white'
               }`}
             >
-              <span>{cat.category_icon}</span>
+              <span>
+                {cat.category_icon?.startsWith('/') ? (
+                  <img src={`http://localhost:8000${cat.category_icon}`} alt={cat.category_name} className="w-5 h-5 object-contain" />
+                ) : (
+                  cat.category_icon
+                )}
+              </span>
               {cat.category_name}
             </button>
           ))}
@@ -125,7 +137,15 @@ export default function LeaderboardPage() {
       {/* Leaderboard Table */}
       <div className="glass-card p-6">
         <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
-          {selectedCat && <span className="text-2xl">{selectedCat.category_icon}</span>}
+          {selectedCat && (
+            <span className="text-2xl flex items-center justify-center">
+              {selectedCat.category_icon?.startsWith('/') ? (
+                <img src={`http://localhost:8000${selectedCat.category_icon}`} alt={selectedCat.category_name} className="w-8 h-8 object-contain" />
+              ) : (
+                selectedCat.category_icon
+              )}
+            </span>
+          )}
           {selectedCat?.category_name || 'Module'} Rankings
         </h2>
 

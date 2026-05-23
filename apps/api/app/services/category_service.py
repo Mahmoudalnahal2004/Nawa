@@ -11,11 +11,19 @@ from app.schemas.category import CategoryCreate, CategoryUpdate, CategoryRespons
 
 async def create_category(db: AsyncSession, data: CategoryCreate) -> Category:
     """Create a new category."""
+    if data.parent_id:
+        parent = await get_category_by_id(db, data.parent_id)
+        if parent:
+            data.target_year = parent.target_year
+            data.university = parent.university
+
     category = Category(
         name=data.name,
         description=data.description or "",
         icon=data.icon or "📚",
         parent_id=data.parent_id,
+        target_year=data.target_year,
+        university=data.university,
     )
     db.add(category)
     await db.flush()
@@ -43,7 +51,7 @@ async def get_categories_tree(db: AsyncSession, target_year: int | None = None, 
     from sqlalchemy import or_
     
     if target_year is not None:
-        query = query.where(or_(Category.target_year == None, Category.target_year == target_year))
+        query = query.where(Category.target_year == target_year)
         
     if university is not None:
         query = query.where(or_(Category.university == None, Category.university == university))
@@ -60,6 +68,8 @@ async def get_categories_tree(db: AsyncSession, target_year: int | None = None, 
             "description": cat.description,
             "icon": cat.icon,
             "parent_id": cat.parent_id,
+            "target_year": cat.target_year,
+            "university": cat.university,
             "created_at": cat.created_at,
             "question_count": count,
         })
@@ -86,14 +96,32 @@ async def update_category(db: AsyncSession, category_id: int, data: CategoryUpda
     if category is None:
         return None
 
-    if data.name is not None:
-        category.name = data.name
-    if data.description is not None:
-        category.description = data.description
-    if data.icon is not None:
-        category.icon = data.icon
-    if data.parent_id is not None:
-        category.parent_id = data.parent_id
+    update_data = data.model_dump(exclude_unset=True)
+    
+    # Inherit from parent if parent_id is being updated
+    if "parent_id" in update_data and update_data["parent_id"]:
+        new_parent = await get_category_by_id(db, update_data["parent_id"])
+        if new_parent:
+            update_data["target_year"] = new_parent.target_year
+            update_data["university"] = new_parent.university
+    elif category.parent_id and ("target_year" in update_data or "university" in update_data):
+        # Prevent overriding parent's target_year/university on a subcategory directly
+        parent = await get_category_by_id(db, category.parent_id)
+        if parent:
+            update_data["target_year"] = parent.target_year
+            update_data["university"] = parent.university
+
+    for field, value in update_data.items():
+        setattr(category, field, value)
+
+    # Cascade changes to children if target_year or university changes
+    if "target_year" in update_data or "university" in update_data:
+        children_result = await db.execute(select(Category).where(Category.parent_id == category.id))
+        for child in children_result.scalars():
+            if "target_year" in update_data:
+                child.target_year = update_data["target_year"]
+            if "university" in update_data:
+                child.university = update_data["university"]
 
     await db.flush()
     await db.refresh(category)

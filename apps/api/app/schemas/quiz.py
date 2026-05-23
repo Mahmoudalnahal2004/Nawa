@@ -5,6 +5,7 @@ class QuizStartRequest(BaseModel):
     category_id: int
     num_questions: int
     mode: Literal['practice', 'exam'] = 'practice'
+    quiz_name: Optional[str] = None
 
 
 class QuizQuestion(BaseModel):
@@ -20,16 +21,6 @@ class QuizQuestion(BaseModel):
     explanation: Optional[str] = None
 
 
-class QuizSessionResponse(BaseModel):
-    session_id: str
-    mode: Literal['practice', 'exam'] = 'practice'
-    questions: List[QuizQuestion]
-    total_questions: int
-    category_name: str
-    current_question_index: int = 0
-    status: str = 'in_progress'
-
-
 class AnswerRequest(BaseModel):
     question_id: int
     selected_answer: str
@@ -41,6 +32,20 @@ class AnswerFeedback(BaseModel):
     correct_answer: str
     is_correct: bool
     explanation: Optional[str]
+
+
+class QuizSessionResponse(BaseModel):
+    session_id: str
+    mode: Literal['practice', 'exam'] = 'practice'
+    questions: List[QuizQuestion]
+    total_questions: int
+    category_name: str
+    current_question_index: int = 0
+    status: str = 'in_progress'
+    quiz_name: Optional[str] = None
+    answers: List[AnswerFeedback] = []
+    exam_answers: Optional[dict] = None
+    flagged_questions: Optional[dict] = None
 
 
 class QuizResultSummary(BaseModel):
@@ -65,7 +70,14 @@ class QuizGenerateRequest(BaseModel):
     question_count: int
     mode: Literal['Unused', 'Incorrect', 'Bookmarked', 'All']
     quiz_mode: Literal['practice', 'exam'] = 'practice'
+    quiz_name: Optional[str] = None
 
 
 class PauseSessionRequest(BaseModel):
     current_question_index: int
+    exam_answers: Optional[dict] = None
+    flagged_questions: Optional[dict] = None
+
+
+class QuizRenameRequest(BaseModel):
+    quiz_name: str

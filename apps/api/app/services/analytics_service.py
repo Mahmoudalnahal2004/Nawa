@@ -3,29 +3,30 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.user_progress import UserProgress
 from app.models.question import Question, QuestionStatus
 from app.models.category import Category
-from app.schemas.analytics import OverallProgress, CategoryProgress, WeakPointQuestion
+from app.models.quiz_session import QuizSession
+from app.schemas.analytics import OverallProgress, CategoryProgress, WeakPointQuestion, LeaderboardEntry
 from typing import List
 
 
 async def get_overall_progress(db: AsyncSession, user_id: int) -> OverallProgress:
-    # Get best attempt per question
-    subq = select(
-        UserProgress.question_id,
-        func.max(case((UserProgress.is_correct == True, 1), else_=0)).label("is_correct")
-    ).where(UserProgress.user_id == user_id).group_by(UserProgress.question_id).subquery()
+    query = select(QuizSession).where(QuizSession.user_id == user_id)
+    result = await db.execute(query)
+    
+    total = 0
+    correct = 0
+    for s in result.scalars().all():
+        for ans in s.answers:
+            total += 1
+            if ans.get("is_correct"):
+                correct += 1
 
-    result = await db.execute(
-        select(
-            func.count(subq.c.question_id).label("total"),
-            func.sum(subq.c.is_correct).label("correct"),
-        )
-    )
-    row = result.one()
-    total = row.total or 0
-    correct = row.correct or 0
+    # Calculate weak points count
+    weak_points = await get_weak_points(db, user_id)
+
     return OverallProgress(
         total_answered=total, correct_count=correct, incorrect_count=total - correct,
         accuracy_percentage=round((correct / total * 100) if total > 0 else 0, 1),
+        weak_points_count=len(weak_points)
     )
 
 
@@ -39,13 +40,9 @@ async def get_category_progress(db: AsyncSession, user_id: int, target_year: int
 
     from sqlalchemy import or_
 
-    # If student has a target_year set, show only universal categories (NULL) + their year
     if target_year is not None:
-        cat_query = cat_query.where(
-            or_(Category.target_year == None, Category.target_year == target_year)
-        )
+        cat_query = cat_query.where(Category.target_year == target_year)
         
-    # If student has a university set, show only universal categories (NULL) + their university
     if university is not None:
         cat_query = cat_query.where(
             or_(Category.university == None, Category.university == university)
@@ -54,24 +51,23 @@ async def get_category_progress(db: AsyncSession, user_id: int, target_year: int
     cat_result = await db.execute(cat_query)
     categories = cat_result.all()
 
-    # Get best attempt per question per category
-    subq = select(
-        Question.category_id,
-        UserProgress.question_id,
-        func.max(case((UserProgress.is_correct == True, 1), else_=0)).label("is_correct")
-    ).join(Question, UserProgress.question_id == Question.id
-    ).where(UserProgress.user_id == user_id
-    ).group_by(Question.category_id, UserProgress.question_id).subquery()
+    # Load all question category_ids into a dict for fast lookup
+    questions_result = await db.execute(select(Question.id, Question.category_id))
+    q_cat_map = {r.id: r.category_id for r in questions_result.all()}
 
-    # Aggregate by category
-    progress_query = select(
-        subq.c.category_id,
-        func.count(subq.c.question_id).label("answered"),
-        func.sum(subq.c.is_correct).label("correct"),
-    ).group_by(subq.c.category_id)
+    progress_map = {}
     
-    prog_result = await db.execute(progress_query)
-    progress_map = {r.category_id: {"answered": r.answered, "correct": r.correct or 0} for r in prog_result.all()}
+    sessions_result = await db.execute(select(QuizSession).where(QuizSession.user_id == user_id))
+    for s in sessions_result.scalars().all():
+        for ans in s.answers:
+            qid = ans.get("question_id")
+            cat_id = q_cat_map.get(qid)
+            if cat_id is not None:
+                if cat_id not in progress_map:
+                    progress_map[cat_id] = {"answered": 0, "correct": 0}
+                progress_map[cat_id]["answered"] += 1
+                if ans.get("is_correct"):
+                    progress_map[cat_id]["correct"] += 1
 
     result = []
     for cat in categories:
@@ -87,75 +83,100 @@ async def get_category_progress(db: AsyncSession, user_id: int, target_year: int
 
 
 async def get_weak_points(db: AsyncSession, user_id: int) -> List[WeakPointQuestion]:
-    # Questions the user got wrong (latest attempt was incorrect)
-    subq = select(
-        UserProgress.question_id,
-        func.count(UserProgress.id).label("times_incorrect"),
-        func.max(UserProgress.answered_at).label("last_attempt"),
-    ).where(UserProgress.user_id == user_id, UserProgress.is_correct == False
-    ).group_by(UserProgress.question_id).subquery()
-
-    # Exclude questions the user later answered correctly
-    correct_subq = select(UserProgress.question_id).where(
-        UserProgress.user_id == user_id, UserProgress.is_correct == True
-    ).distinct().subquery()
-
+    wrong_counts = {}
+    got_right = set()
+    last_attempt = {}
+    
+    sessions_result = await db.execute(select(QuizSession).where(QuizSession.user_id == user_id).order_by(QuizSession.created_at.asc()))
+    
+    for s in sessions_result.scalars().all():
+        for ans in s.answers:
+            qid = ans.get("question_id")
+            last_attempt[qid] = s.created_at
+            if ans.get("is_correct"):
+                got_right.add(qid)
+            else:
+                if qid in got_right:
+                    got_right.remove(qid) # if they get it wrong again, it's a weak point again
+                wrong_counts[qid] = wrong_counts.get(qid, 0) + 1
+                    
+    weak_qids = [qid for qid, count in wrong_counts.items() if qid not in got_right and count > 0]
+    
+    if not weak_qids:
+        return []
+        
     result = await db.execute(
-        select(subq.c.question_id, subq.c.times_incorrect, subq.c.last_attempt,
-               Question.question_text, Category.name.label("category_name"))
-        .join(Question, subq.c.question_id == Question.id)
+        select(Question.id, Question.question_text, Category.name.label("category_name"))
         .outerjoin(Category, Question.category_id == Category.id)
-        .where(subq.c.question_id.notin_(select(correct_subq.c.question_id)))
-        .order_by(subq.c.times_incorrect.desc())
+        .where(Question.id.in_(weak_qids))
     )
-    return [
-        WeakPointQuestion(
-            question_id=r.question_id, question_text=r.question_text[:100] + "..." if len(r.question_text) > 100 else r.question_text,
-            category_name=r.category_name or "Uncategorized", times_incorrect=r.times_incorrect,
-            last_attempt=str(r.last_attempt),
-        ) for r in result.all()
-    ]
+    
+    questions_map = {r.id: r for r in result.all()}
+    
+    weak_points = []
+    for qid in weak_qids:
+        r = questions_map.get(qid)
+        if r:
+            weak_points.append(WeakPointQuestion(
+                question_id=qid, 
+                question_text=r.question_text[:100] + "..." if len(r.question_text) > 100 else r.question_text,
+                category_name=r.category_name or "Uncategorized", 
+                times_incorrect=wrong_counts[qid],
+                last_attempt=str(last_attempt[qid])
+            ))
+            
+    weak_points.sort(key=lambda x: x.times_incorrect, reverse=True)
+    return weak_points
 
 
-async def get_leaderboard(db: AsyncSession, category_id: int):
-    from app.schemas.analytics import LeaderboardEntry
+async def get_leaderboard(db: AsyncSession, category_id: int) -> List[LeaderboardEntry]:
     from app.models.user import User as UserModel, UserRole
-
-    # Aggregate best attempt per question per user for this category
-    subq = select(
-        UserProgress.user_id,
-        UserProgress.question_id,
-        func.max(case((UserProgress.is_correct == True, 1), else_=0)).label("is_correct")
-    ).join(Question, UserProgress.question_id == Question.id
-    ).where(Question.category_id == category_id
-    ).group_by(UserProgress.user_id, UserProgress.question_id).subquery()
-
-    # Sum per user
-    agg = select(
-        subq.c.user_id,
-        func.count(subq.c.question_id).label("total_answered"),
-        func.sum(subq.c.is_correct).label("correct_count"),
-    ).group_by(subq.c.user_id).having(func.count(subq.c.question_id) >= 1).subquery()
-
+    
+    if category_id == 0:
+        cat_qids = None
+    else:
+        questions_result = await db.execute(select(Question.id).where(Question.category_id == category_id))
+        cat_qids = {r.id for r in questions_result.all()}
+    
+    user_stats = {}
+    sessions_result = await db.execute(select(QuizSession))
+    for s in sessions_result.scalars().all():
+        uid = s.user_id
+        if uid not in user_stats:
+            user_stats[uid] = {"total": 0, "correct": 0}
+            
+        for ans in s.answers:
+            if cat_qids is None or ans.get("question_id") in cat_qids:
+                user_stats[uid]["total"] += 1
+                if ans.get("is_correct"):
+                    user_stats[uid]["correct"] += 1
+                    
+    valid_uids = [uid for uid, stats in user_stats.items() if stats["total"] > 0]
+    if not valid_uids:
+        return []
+        
     result = await db.execute(
-        select(
-            agg.c.user_id, agg.c.total_answered, agg.c.correct_count,
-            UserModel.full_name, UserModel.is_anonymous,
-        ).join(UserModel, agg.c.user_id == UserModel.id
-        ).where(UserModel.role == UserRole.STUDENT
-        ).order_by(agg.c.correct_count.desc(), agg.c.total_answered.asc()
-        ).limit(10)
+        select(UserModel.id, UserModel.full_name, UserModel.is_anonymous)
+        .where(UserModel.id.in_(valid_uids), UserModel.role == UserRole.STUDENT)
     )
-
+    users_map = {r.id: r for r in result.all()}
+    
     entries = []
-    for rank, r in enumerate(result.all(), 1):
-        correct = r.correct_count or 0
-        total = r.total_answered or 0
-        accuracy = round((correct / total * 100) if total > 0 else 0, 1)
-        display_name = "Anonymous Student" if r.is_anonymous else r.full_name
-        entries.append(LeaderboardEntry(
-            rank=rank, user_id=r.user_id, display_name=display_name,
-            correct_count=correct, total_answered=total,
-            accuracy_percentage=accuracy,
-        ))
-    return entries
+    for uid, stats in user_stats.items():
+        if uid in users_map:
+            u = users_map[uid]
+            correct = stats["correct"]
+            total = stats["total"]
+            accuracy = round((correct / total * 100) if total > 0 else 0, 1)
+            display_name = "Anonymous Student" if u.is_anonymous else u.full_name
+            entries.append(LeaderboardEntry(
+                rank=0, user_id=uid, display_name=display_name,
+                correct_count=correct, total_answered=total,
+                accuracy_percentage=accuracy,
+            ))
+            
+    entries.sort(key=lambda x: (x.correct_count, -x.total_answered), reverse=True)
+    for i, e in enumerate(entries, 1):
+        e.rank = i
+        
+    return entries[:10]
