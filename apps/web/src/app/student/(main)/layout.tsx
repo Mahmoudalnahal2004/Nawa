@@ -4,10 +4,11 @@ import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { isAuthenticated, getStoredUser, clearAuth } from '@/lib/auth';
 import {
-  LayoutDashboard, AlertTriangle, LogOut, Menu, X, Stethoscope, ChevronRight, BookOpen, UserCircle2, History, Trophy, Flame
+  LayoutDashboard, AlertTriangle, LogOut, Menu, X, Stethoscope, ChevronRight, BookOpen, UserCircle2, History, Trophy, Flame, Home
 } from 'lucide-react';
 
 const navItems = [
+  { href: '/student/home', icon: Home, label: 'Home' },
   { href: '/student/dashboard', icon: LayoutDashboard, label: 'Create Quiz' },
   { href: '/student/weak-points', icon: AlertTriangle, label: 'Weak Points' },
   { href: '/student/history', icon: History, label: 'History & Analytics' },

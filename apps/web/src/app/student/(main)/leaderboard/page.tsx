@@ -94,108 +94,113 @@ export default function LeaderboardPage() {
   const selectedCat = categories.find(c => c.category_id === selectedCategory);
 
   return (
-    <div className="max-w-3xl mx-auto space-y-8 animate-fade-in">
-      <div className="flex items-center gap-3">
-        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-yellow-500 to-amber-600 flex items-center justify-center shadow-lg shadow-yellow-500/25">
-          <Trophy className="w-6 h-6 text-white" />
+    <div className="max-w-6xl mx-auto animate-fade-in flex flex-col lg:flex-row gap-8 items-start">
+      {/* Main Content: Leaderboard */}
+      <div className="flex-1 space-y-8 w-full order-2 lg:order-1">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-yellow-500 to-amber-600 flex items-center justify-center shadow-lg shadow-yellow-500/25">
+            <Trophy className="w-6 h-6 text-white" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-bold text-white">Leaderboard</h1>
+            <p className="text-gray-400 text-sm">Compete with fellow students across modules</p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-3xl font-bold text-white">Leaderboard</h1>
-          <p className="text-gray-400 text-sm">Compete with fellow students across modules</p>
-        </div>
-      </div>
 
-      {/* Module Selector */}
-      <div className="glass-card p-4">
-        <div className="flex items-center gap-3 mb-3">
-          <span className="text-sm font-semibold text-gray-400">Select Module</span>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {categories.map(cat => (
-            <button
-              key={cat.category_id}
-              onClick={() => handleCategoryChange(cat.category_id)}
-              className={`px-4 py-2.5 rounded-xl text-sm font-medium transition-all flex items-center gap-2 ${
-                selectedCategory === cat.category_id
-                  ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/25'
-                  : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10 hover:text-white'
-              }`}
-            >
-              <span>
-                {cat.category_icon?.startsWith('/') ? (
-                  <img src={`http://localhost:8000${cat.category_icon}`} alt={cat.category_name} className="w-5 h-5 object-contain" />
+        {/* Leaderboard Table */}
+        <div className="glass-card p-6">
+          <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
+            {selectedCat && (
+              <span className="text-2xl flex items-center justify-center">
+                {selectedCat.category_icon?.startsWith('/') ? (
+                  <img src={`http://localhost:8000${selectedCat.category_icon}`} alt={selectedCat.category_name} className="w-8 h-8 object-contain" />
                 ) : (
-                  cat.category_icon
+                  selectedCat.category_icon
                 )}
               </span>
-              {cat.category_name}
-            </button>
-          ))}
+            )}
+            {selectedCat?.category_name || 'Module'} Rankings
+          </h2>
+
+          {loadingBoard ? (
+            <div className="flex justify-center py-10">
+              <Loader2 className="w-8 h-8 text-emerald-400 animate-spin" />
+            </div>
+          ) : leaderboard.length === 0 ? (
+            <div className="text-center py-12">
+              <Trophy className="w-12 h-12 text-gray-600 mx-auto mb-4" />
+              <p className="text-gray-500 text-sm">No students have attempted this module yet.</p>
+              <p className="text-gray-600 text-xs mt-1">Be the first to claim the top spot!</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {leaderboard.map(entry => (
+                <div
+                  key={entry.user_id}
+                  className={`flex items-center gap-4 px-5 py-4 rounded-xl border transition-all hover:scale-[1.01] ${getRankBg(entry.rank)}`}
+                >
+                  <div className="w-8 flex items-center justify-center shrink-0">
+                    {getRankIcon(entry.rank)}
+                  </div>
+
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500/20 to-emerald-600/20 flex items-center justify-center shrink-0">
+                    <span className="text-emerald-400 font-bold text-sm">
+                      {entry.display_name === 'Anonymous Student' ? '?' : entry.display_name[0]}
+                    </span>
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-semibold truncate ${entry.display_name === 'Anonymous Student' ? 'text-gray-400 italic' : 'text-white'}`}>
+                      {entry.display_name}
+                    </p>
+                    <p className="text-xs text-gray-500">{entry.total_answered} questions answered</p>
+                  </div>
+
+                  <div className="text-right shrink-0">
+                    <p className={`text-lg font-bold ${
+                      entry.accuracy_percentage >= 80 ? 'text-emerald-400' :
+                      entry.accuracy_percentage >= 60 ? 'text-amber-400' : 'text-rose-400'
+                    }`}>
+                      {entry.accuracy_percentage}%
+                    </p>
+                    <p className="text-xs text-gray-500">{entry.correct_count} correct</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Leaderboard Table */}
-      <div className="glass-card p-6">
-        <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
-          {selectedCat && (
-            <span className="text-2xl flex items-center justify-center">
-              {selectedCat.category_icon?.startsWith('/') ? (
-                <img src={`http://localhost:8000${selectedCat.category_icon}`} alt={selectedCat.category_name} className="w-8 h-8 object-contain" />
-              ) : (
-                selectedCat.category_icon
-              )}
-            </span>
-          )}
-          {selectedCat?.category_name || 'Module'} Rankings
-        </h2>
-
-        {loadingBoard ? (
-          <div className="flex justify-center py-10">
-            <Loader2 className="w-8 h-8 text-emerald-400 animate-spin" />
+      {/* Sidebar: Module Selector */}
+      <div className="w-full lg:w-80 shrink-0 sticky top-24 order-1 lg:order-2">
+        <div className="glass-card p-5 border-t-4 border-t-emerald-500">
+          <div className="flex items-center gap-3 mb-4">
+            <h3 className="text-sm font-bold text-white uppercase tracking-wider">Select Module</h3>
           </div>
-        ) : leaderboard.length === 0 ? (
-          <div className="text-center py-12">
-            <Trophy className="w-12 h-12 text-gray-600 mx-auto mb-4" />
-            <p className="text-gray-500 text-sm">No students have attempted this module yet.</p>
-            <p className="text-gray-600 text-xs mt-1">Be the first to claim the top spot!</p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {leaderboard.map(entry => (
-              <div
-                key={entry.user_id}
-                className={`flex items-center gap-4 px-5 py-4 rounded-xl border transition-all hover:scale-[1.01] ${getRankBg(entry.rank)}`}
+          <div className="flex flex-col gap-2 max-h-[70vh] overflow-y-auto custom-scrollbar pr-2">
+            {categories.map(cat => (
+              <button
+                key={cat.category_id}
+                onClick={() => handleCategoryChange(cat.category_id)}
+                className={`w-full px-4 py-3 rounded-xl text-sm font-medium transition-all flex items-center gap-3 text-left ${
+                  selectedCategory === cat.category_id
+                    ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/25'
+                    : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10 hover:text-white'
+                }`}
               >
-                <div className="w-8 flex items-center justify-center shrink-0">
-                  {getRankIcon(entry.rank)}
-                </div>
-
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500/20 to-emerald-600/20 flex items-center justify-center shrink-0">
-                  <span className="text-emerald-400 font-bold text-sm">
-                    {entry.display_name === 'Anonymous Student' ? '?' : entry.display_name[0]}
-                  </span>
-                </div>
-
-                <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-semibold truncate ${entry.display_name === 'Anonymous Student' ? 'text-gray-400 italic' : 'text-white'}`}>
-                    {entry.display_name}
-                  </p>
-                  <p className="text-xs text-gray-500">{entry.total_answered} questions answered</p>
-                </div>
-
-                <div className="text-right shrink-0">
-                  <p className={`text-lg font-bold ${
-                    entry.accuracy_percentage >= 80 ? 'text-emerald-400' :
-                    entry.accuracy_percentage >= 60 ? 'text-amber-400' : 'text-rose-400'
-                  }`}>
-                    {entry.accuracy_percentage}%
-                  </p>
-                  <p className="text-xs text-gray-500">{entry.correct_count} correct</p>
-                </div>
-              </div>
+                <span className="shrink-0">
+                  {cat.category_icon?.startsWith('/') ? (
+                    <img src={`http://localhost:8000${cat.category_icon}`} alt={cat.category_name} className="w-5 h-5 object-contain" />
+                  ) : (
+                    cat.category_icon
+                  )}
+                </span>
+                <span className="truncate">{cat.category_name}</span>
+              </button>
             ))}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

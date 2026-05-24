@@ -53,7 +53,11 @@ export default function AdminCategoriesPage() {
 
   const openAddModal = () => {
     setEditingCategory(null);
-    setFormData({ name: '', description: '', icon: '', parent_id: '', target_year: '' });
+    let defaultYear = '';
+    if (yearFilter !== 'All' && yearFilter !== 'Global') {
+      defaultYear = yearFilter;
+    }
+    setFormData({ name: '', description: '', icon: '', parent_id: '', target_year: defaultYear });
     setIsModalOpen(true);
   };
 

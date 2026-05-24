@@ -8,6 +8,7 @@ class OverallProgress(BaseModel):
     incorrect_count: int
     accuracy_percentage: float
     weak_points_count: int
+    rank: Optional[int] = None
 
 
 class CategoryProgress(BaseModel):

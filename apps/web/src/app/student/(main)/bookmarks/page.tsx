@@ -144,7 +144,7 @@ export default function BookmarksReviewPage() {
   if (loading && questions.length === 0 && filterTree.length === 0) {
     return (
       <div className="flex justify-center items-center min-h-[60vh]">
-        <Loader2 className="w-10 h-10 text-purple-400 animate-spin" />
+        <Loader2 className="w-10 h-10 text-amber-400 animate-spin" />
       </div>
     );
   }
@@ -172,7 +172,7 @@ export default function BookmarksReviewPage() {
           >
             <Filter className="w-4 h-4" /> Filter
           </button>
-          <div className="text-sm font-semibold text-purple-400 bg-purple-500/10 border border-purple-500/20 px-3 py-2 rounded-lg">
+          <div className="text-sm font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-3 py-2 rounded-lg">
             {total} Bookmarks
           </div>
         </div>
@@ -182,13 +182,13 @@ export default function BookmarksReviewPage() {
         {/* Sidebar Filter */}
         <div className={`w-full lg:w-72 shrink-0 glass-card p-5 ${!showMobileFilter && 'hidden lg:block'}`}>
           <div className="flex items-center gap-2 font-bold text-white mb-4 text-lg">
-            <Filter className="w-5 h-5 text-purple-400" /> Filter
+            <Filter className="w-5 h-5 text-amber-400" /> Filter
           </div>
           
           <div className="space-y-1">
             <button 
               onClick={() => handleSelectCategory(null)}
-              className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors ${selectedCategoryIds === null ? 'bg-purple-500/20 text-purple-400' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}
+              className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors ${selectedCategoryIds === null ? 'bg-amber-500/20 text-amber-400' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}
             >
               All Modules
             </button>
@@ -202,7 +202,7 @@ export default function BookmarksReviewPage() {
                 <div key={parent.id} className="pt-2">
                   <div 
                     onClick={() => handleSelectCategory(parent.id, parentChildIds)}
-                    className={`flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer transition-colors group ${isSelected ? 'bg-purple-500/20 text-purple-400' : 'text-gray-300 hover:bg-white/5'}`}
+                    className={`flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer transition-colors group ${isSelected ? 'bg-amber-500/20 text-amber-400' : 'text-gray-300 hover:bg-white/5'}`}
                   >
                     <div className="flex items-center gap-2 font-medium text-sm">
                       <button onClick={(e) => toggleParent(parent.id, e)} className="p-0.5 rounded hover:bg-white/10 text-gray-400 group-hover:text-inherit transition-colors">
@@ -210,7 +210,7 @@ export default function BookmarksReviewPage() {
                       </button>
                       {parent.name}
                     </div>
-                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${isSelected ? 'bg-purple-500/20 text-purple-300' : 'bg-slate-800 text-gray-400 group-hover:bg-slate-700'}`}>
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${isSelected ? 'bg-amber-500/20 text-amber-300' : 'bg-slate-800 text-gray-400 group-hover:bg-slate-700'}`}>
                       {parent.totalCount}
                     </span>
                   </div>
@@ -223,10 +223,10 @@ export default function BookmarksReviewPage() {
                           <div 
                             key={child.id}
                             onClick={() => handleSelectCategory(child.id)}
-                            className={`flex items-center justify-between px-3 py-1.5 rounded-lg cursor-pointer transition-colors ${childSelected ? 'bg-purple-500/20 text-purple-400' : 'text-gray-400 hover:bg-white/5 hover:text-gray-200'}`}
+                            className={`flex items-center justify-between px-3 py-1.5 rounded-lg cursor-pointer transition-colors ${childSelected ? 'bg-amber-500/20 text-amber-400' : 'text-gray-400 hover:bg-white/5 hover:text-gray-200'}`}
                           >
                             <span className="text-sm">{child.name}</span>
-                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${childSelected ? 'bg-purple-500/20 text-purple-300' : 'bg-slate-800 text-gray-500'}`}>
+                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${childSelected ? 'bg-amber-500/20 text-amber-300' : 'bg-slate-800 text-gray-500'}`}>
                               {availableCounts[child.id]}
                             </span>
                           </div>
@@ -255,7 +255,7 @@ export default function BookmarksReviewPage() {
 
           {loading && questions.length > 0 && (
             <div className="absolute inset-0 z-10 bg-slate-950/50 backdrop-blur-sm flex items-center justify-center rounded-2xl">
-              <Loader2 className="w-8 h-8 text-purple-400 animate-spin" />
+              <Loader2 className="w-8 h-8 text-amber-400 animate-spin" />
             </div>
           )}
 
@@ -273,7 +273,7 @@ export default function BookmarksReviewPage() {
                 <div className="flex items-start justify-between gap-4 mb-6">
                   <div className="flex-1">
                     {q.category_name && (
-                      <span className="text-xs font-bold uppercase tracking-wider text-purple-400 mb-2 block">
+                      <span className="text-xs font-bold uppercase tracking-wider text-amber-400 mb-2 block">
                         {q.category_name}
                       </span>
                     )}

@@ -12,7 +12,7 @@ export default function HomePage() {
     if (isAuthenticated()) {
       const user = getStoredUser();
       if (user?.role === 'admin') router.push('/admin/dashboard');
-      else router.push('/student/dashboard');
+      else router.push('/student/home');
     }
   }, [router]);
 

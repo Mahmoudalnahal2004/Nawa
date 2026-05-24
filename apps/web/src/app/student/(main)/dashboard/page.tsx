@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/api';
 import { toast } from 'sonner';
-import { Loader2, CheckCircle, ChevronRight, Layers, Layout, ShieldAlert } from 'lucide-react';
+import { Loader2, CheckCircle, ChevronRight, Layers, Layout, ShieldAlert, LayoutGrid, List } from 'lucide-react';
 
 interface Category {
   id: number;
@@ -21,6 +21,7 @@ export default function QuizGeneratorPage() {
   const router = useRouter();
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   
   const [selectedMode, setSelectedMode] = useState<QuizMode>('Unused');
   const [selectedBlocks, setSelectedBlocks] = useState<number[]>([]);
@@ -130,7 +131,7 @@ export default function QuizGeneratorPage() {
     <div className="max-w-5xl mx-auto pb-32 animate-fade-in">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-white mb-2">Custom Quiz Generator</h1>
-        <p className="text-gray-400">Create a personalized exam by selecting specific modes, blocks, and topics.</p>
+        <p className="text-gray-400">Create a personalized exam by selecting specific modes, modules, and topics.</p>
       </div>
 
       <div className="space-y-8">
@@ -158,44 +159,93 @@ export default function QuizGeneratorPage() {
 
         {/* Section 2: Blocks */}
         <div className="glass-card p-6">
-          <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-            <Layout className="w-5 h-5 text-emerald-400" /> 2. Select Blocks
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {categories.map(block => {
-              const isSelected = selectedBlocks.includes(block.id);
-              return (
-                <button
-                  key={block.id}
-                  onClick={() => toggleBlock(block.id)}
-                  className={`relative flex flex-col rounded-2xl border-2 text-left transition-all overflow-hidden h-48 group ${
-                    isSelected 
-                      ? 'border-indigo-500 shadow-xl shadow-indigo-500/20 ring-1 ring-indigo-500' 
-                      : 'border-transparent bg-slate-800/50 grayscale opacity-60 hover:grayscale-0 hover:opacity-100 hover:bg-slate-800'
-                  }`}
-                >
-                  <div className="flex-1 w-full relative flex items-center justify-center bg-white/5 overflow-hidden">
-                    {block.icon?.startsWith('/') ? (
-                      <img src={`http://localhost:8000${block.icon}`} alt={block.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
-                    ) : (
-                      <div className="text-6xl drop-shadow-xl transition-transform duration-500 group-hover:scale-110">{block.icon}</div>
-                    )}
-                    {isSelected && (
-                      <div className="absolute top-3 right-3 bg-indigo-500 text-white rounded-full shadow-lg">
-                        <CheckCircle className="w-6 h-6" />
-                      </div>
-                    )}
-                  </div>
-                  <div className={`w-full px-4 py-3 flex items-center justify-between transition-colors ${isSelected ? 'bg-indigo-950 text-white' : 'bg-slate-900 text-gray-300'}`}>
-                    <h3 className="font-bold truncate text-[15px] flex-1 pr-2">{block.name}</h3>
-                    <div className={`text-xs font-bold px-2.5 py-1 rounded-full ${isSelected ? 'bg-indigo-500/20 text-indigo-300' : 'bg-slate-700 text-gray-400'}`}>
-                      {block.children?.reduce((sum, child) => sum + (availableCounts[child.id] || 0), 0) || 0}
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+              <Layout className="w-5 h-5 text-emerald-400" /> 2. Select Modules
+            </h2>
+            <div className="flex items-center bg-white/5 rounded-full p-1 border border-white/10">
+              <button
+                onClick={() => setViewMode('grid')}
+                className={`p-1.5 rounded-full transition-colors ${viewMode === 'grid' ? 'bg-white text-slate-900 shadow-sm' : 'text-gray-400 hover:text-white'}`}
+              >
+                <LayoutGrid className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setViewMode('list')}
+                className={`p-1.5 rounded-full transition-colors ${viewMode === 'list' ? 'bg-white text-slate-900 shadow-sm' : 'text-gray-400 hover:text-white'}`}
+              >
+                <List className="w-4 h-4" />
+              </button>
+            </div>
           </div>
+          
+          {viewMode === 'grid' ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {categories.map(block => {
+                const totalCount = block.children?.reduce((sum, child) => sum + (availableCounts[child.id] || 0), 0) || 0;
+                const isSelected = selectedBlocks.includes(block.id);
+                const isDisabled = totalCount === 0;
+                return (
+                  <button
+                    key={block.id}
+                    onClick={() => !isDisabled && toggleBlock(block.id)}
+                    disabled={isDisabled}
+                    className={`relative flex flex-col rounded-2xl border-2 text-left transition-all overflow-hidden h-48 group ${
+                      isDisabled
+                        ? 'opacity-30 cursor-not-allowed border-transparent bg-slate-900 grayscale'
+                        : isSelected 
+                          ? 'border-indigo-500 shadow-xl shadow-indigo-500/20 ring-1 ring-indigo-500' 
+                          : 'border-transparent bg-slate-800/50 grayscale opacity-60 hover:grayscale-0 hover:opacity-100 hover:bg-slate-800'
+                    }`}
+                  >
+                    <div className="flex-1 w-full relative flex items-center justify-center bg-white/5 overflow-hidden">
+                      {block.icon?.startsWith('/') ? (
+                        <img src={`http://localhost:8000${block.icon}`} alt={block.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                      ) : (
+                        <div className="text-6xl drop-shadow-xl transition-transform duration-500 group-hover:scale-110">{block.icon}</div>
+                      )}
+                      {isSelected && (
+                        <div className="absolute top-3 right-3 bg-indigo-500 text-white rounded-full shadow-lg">
+                          <CheckCircle className="w-6 h-6" />
+                        </div>
+                      )}
+                    </div>
+                    <div className={`w-full px-4 py-3 flex items-center justify-between transition-colors ${isSelected ? 'bg-indigo-950 text-white' : 'bg-slate-900 text-gray-300'}`}>
+                      <h3 className="font-bold truncate text-[15px] flex-1 pr-2">{block.name}</h3>
+                      <div className={`text-xs font-bold px-2.5 py-1 rounded-full ${isSelected ? 'bg-indigo-500/20 text-indigo-300' : 'bg-slate-700 text-gray-400'}`}>
+                        {totalCount}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3">
+              {categories.map(block => {
+                const totalCount = block.children?.reduce((sum, child) => sum + (availableCounts[child.id] || 0), 0) || 0;
+                const isSelected = selectedBlocks.includes(block.id);
+                const isDisabled = totalCount === 0;
+                return (
+                  <label key={block.id} className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${isDisabled ? 'opacity-40 cursor-not-allowed bg-white/5 border-transparent' : isSelected ? 'bg-indigo-500/10 border-indigo-500/30 cursor-pointer' : 'bg-white/5 border-transparent hover:bg-white/10 cursor-pointer'}`}>
+                    <div className="flex items-center gap-3">
+                      <input 
+                        type="checkbox" 
+                        disabled={isDisabled}
+                        checked={isSelected}
+                        onChange={() => toggleBlock(block.id)}
+                        className="w-4 h-4 rounded border-gray-600 text-indigo-500 focus:ring-indigo-500/20 bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                      />
+                      <span className={isSelected ? 'text-white font-medium' : 'text-gray-300'}>{block.name}</span>
+                    </div>
+                    <span className={`text-xs font-mono px-2 py-1 rounded-md ${totalCount > 0 ? 'bg-indigo-500/20 text-indigo-300' : 'bg-white/5 text-gray-500'}`}>
+                      {totalCount}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Section 3: Topics */}
@@ -211,14 +261,16 @@ export default function QuizGeneratorPage() {
                   <div className="space-y-2">
                     {block.children?.map(topic => {
                       const count = availableCounts[topic.id] || 0;
+                      const isDisabled = count === 0;
                       return (
-                        <label key={topic.id} className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-colors ${selectedTopics.includes(topic.id) ? 'bg-purple-500/10 border-purple-500/30' : 'bg-white/5 border-transparent hover:bg-white/10'}`}>
+                        <label key={topic.id} className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${isDisabled ? 'opacity-40 cursor-not-allowed bg-white/5 border-transparent' : selectedTopics.includes(topic.id) ? 'bg-purple-500/10 border-purple-500/30 cursor-pointer' : 'bg-white/5 border-transparent hover:bg-white/10 cursor-pointer'}`}>
                           <div className="flex items-center gap-3">
                             <input 
                               type="checkbox" 
+                              disabled={isDisabled}
                               checked={selectedTopics.includes(topic.id)}
                               onChange={() => toggleTopic(topic.id)}
-                              className="w-4 h-4 rounded border-gray-600 text-purple-500 focus:ring-purple-500/20 bg-slate-800"
+                              className="w-4 h-4 rounded border-gray-600 text-purple-500 focus:ring-purple-500/20 bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
                             />
                             <span className={selectedTopics.includes(topic.id) ? 'text-white font-medium' : 'text-gray-300'}>{topic.name}</span>
                           </div>

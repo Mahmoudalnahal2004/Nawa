@@ -183,16 +183,16 @@ export default function HistoryDashboard() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Bookmarked Questions Card */}
-        <div className="glass-card p-6 flex flex-col justify-between bg-gradient-to-br from-slate-900 to-purple-950/20 border border-purple-500/10">
+        <div className="glass-card p-6 flex flex-col justify-between bg-gradient-to-br from-slate-900 to-amber-950/20 border border-amber-500/10">
           <div className="mb-6">
             <h2 className="text-xl font-bold text-white flex items-center gap-2 mb-2">
-              <Bookmark className="w-5 h-5 text-purple-400" /> Bookmarked Questions
+              <Bookmark className="w-5 h-5 text-amber-400" /> Bookmarked Questions
             </h2>
-            <p className="text-sm text-gray-400">Review your saved questions and study them like flashcards. <span className="text-purple-400 font-bold ml-1 border border-purple-500/20 bg-purple-500/10 px-2 py-0.5 rounded-md">({bookmarksCount} saved)</span></p>
+            <p className="text-sm text-gray-400">Review your saved questions and study them like flashcards. <span className="text-amber-400 font-bold ml-1 border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 rounded-md">({bookmarksCount} saved)</span></p>
           </div>
           <button 
             onClick={() => router.push('/student/bookmarks')} 
-            className="w-full py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-[0.98] bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-500/30 border border-purple-400/30"
+            className="w-full py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-[0.98] bg-amber-600 hover:bg-amber-500 text-white shadow-lg shadow-amber-500/30 border border-amber-400/30"
           >
             Review Bookmarks
           </button>
@@ -204,7 +204,7 @@ export default function HistoryDashboard() {
             <h2 className="text-xl font-bold text-white flex items-center gap-2 mb-2">
               <XCircle className="w-5 h-5 text-rose-400" /> Incorrect Answers
             </h2>
-            <p className="text-sm text-gray-400">Review questions you've answered incorrectly to improve your weak points. <span className="text-rose-400 font-bold ml-1 border border-rose-500/20 bg-rose-500/10 px-2 py-0.5 rounded-md">({data.overall.weak_points_count || 0} questions)</span></p>
+            <p className="text-sm text-gray-400">Review questions you've answered incorrectly. <span className="text-rose-400 font-bold ml-1 border border-rose-500/20 bg-rose-500/10 px-2 py-0.5 rounded-md">({data.overall.incorrect_count || 0} questions)</span></p>
           </div>
           <button 
             onClick={() => router.push('/student/incorrect')} 

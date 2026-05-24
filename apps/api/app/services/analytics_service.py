@@ -8,6 +8,33 @@ from app.schemas.analytics import OverallProgress, CategoryProgress, WeakPointQu
 from typing import List
 
 
+async def get_user_overall_rank(db: AsyncSession, target_user_id: int) -> int | None:
+    user_stats = {}
+    sessions_result = await db.execute(select(QuizSession))
+    for s in sessions_result.scalars().all():
+        uid = s.user_id
+        if uid not in user_stats:
+            user_stats[uid] = {"total": 0, "correct": 0}
+        for ans in s.answers:
+            user_stats[uid]["total"] += 1
+            if ans.get("is_correct"):
+                user_stats[uid]["correct"] += 1
+                
+    if target_user_id not in user_stats or user_stats[target_user_id]["total"] == 0:
+        return None
+        
+    entries = []
+    for uid, stats in user_stats.items():
+        if stats["total"] > 0:
+            entries.append({"uid": uid, "correct": stats["correct"], "total": stats["total"]})
+            
+    entries.sort(key=lambda x: (x["correct"], -x["total"]), reverse=True)
+    for i, e in enumerate(entries, 1):
+        if e["uid"] == target_user_id:
+            return i
+            
+    return None
+
 async def get_overall_progress(db: AsyncSession, user_id: int) -> OverallProgress:
     query = select(QuizSession).where(QuizSession.user_id == user_id)
     result = await db.execute(query)
@@ -20,13 +47,17 @@ async def get_overall_progress(db: AsyncSession, user_id: int) -> OverallProgres
             if ans.get("is_correct"):
                 correct += 1
 
-    # Calculate weak points count
+    # Calculate weak points count which now represents unique existing incorrect questions
     weak_points = await get_weak_points(db, user_id)
+    
+    # Calculate user rank
+    rank = await get_user_overall_rank(db, user_id)
 
     return OverallProgress(
-        total_answered=total, correct_count=correct, incorrect_count=total - correct,
+        total_answered=total, correct_count=correct, incorrect_count=len(weak_points),
         accuracy_percentage=round((correct / total * 100) if total > 0 else 0, 1),
-        weak_points_count=len(weak_points)
+        weak_points_count=len(weak_points),
+        rank=rank
     )
 
 
@@ -84,7 +115,6 @@ async def get_category_progress(db: AsyncSession, user_id: int, target_year: int
 
 async def get_weak_points(db: AsyncSession, user_id: int) -> List[WeakPointQuestion]:
     wrong_counts = {}
-    got_right = set()
     last_attempt = {}
     
     sessions_result = await db.execute(select(QuizSession).where(QuizSession.user_id == user_id).order_by(QuizSession.created_at.asc()))
@@ -92,15 +122,11 @@ async def get_weak_points(db: AsyncSession, user_id: int) -> List[WeakPointQuest
     for s in sessions_result.scalars().all():
         for ans in s.answers:
             qid = ans.get("question_id")
-            last_attempt[qid] = s.created_at
-            if ans.get("is_correct"):
-                got_right.add(qid)
-            else:
-                if qid in got_right:
-                    got_right.remove(qid) # if they get it wrong again, it's a weak point again
+            if not ans.get("is_correct"):
                 wrong_counts[qid] = wrong_counts.get(qid, 0) + 1
+                last_attempt[qid] = s.created_at
                     
-    weak_qids = [qid for qid, count in wrong_counts.items() if qid not in got_right and count > 0]
+    weak_qids = list(wrong_counts.keys())
     
     if not weak_qids:
         return []

@@ -20,7 +20,7 @@ export default function LoginPage() {
     if (isAuthenticated()) {
       const user = getStoredUser();
       if (user?.role === 'admin') router.push('/admin/dashboard');
-      else router.push('/student/dashboard');
+      else router.push('/student/home');
     }
   }, [router]);
 
@@ -39,7 +39,7 @@ export default function LoginPage() {
         storeAuth(tokens.access_token, tokens.refresh_token, user);
         toast.success('Welcome back!');
         if (user.role === 'admin') router.push('/admin/dashboard');
-        else router.push('/student/dashboard');
+        else router.push('/student/home');
       } else {
         await api.post('/auth/register', { email, password, full_name: fullName });
         toast.success('Account created! Please wait for admin activation.');
