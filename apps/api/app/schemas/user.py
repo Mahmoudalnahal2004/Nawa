@@ -10,6 +10,9 @@ class UserListResponse(BaseModel):
     role: str
     is_active: bool
     created_at: datetime
+    quota_id: Optional[int] = None
+    university: Optional[str] = None
+    study_year: Optional[int] = None
 
     class Config:
         from_attributes = True
@@ -17,6 +20,10 @@ class UserListResponse(BaseModel):
 
 class UserToggleActive(BaseModel):
     is_active: bool
+
+
+class UserAssignQuota(BaseModel):
+    quota_id: Optional[int] = None
 
 
 class ChangePasswordRequest(BaseModel):

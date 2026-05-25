@@ -12,6 +12,15 @@ interface User {
   is_active: boolean;
   created_at: string;
   role: string;
+  quota_id: number | null;
+  university: string | null;
+  study_year: number | null;
+}
+
+interface Quota {
+  id: number;
+  name: string;
+  color?: string;
 }
 
 export default function UsersPage() {
@@ -20,14 +29,21 @@ export default function UsersPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [promotingUser, setPromotingUser] = useState<User | null>(null);
   const [demotingUser, setDemotingUser] = useState<User | null>(null);
+  const [editingQuotaUser, setEditingQuotaUser] = useState<User | null>(null);
+  const [selectedQuotaId, setSelectedQuotaId] = useState<number | ''>('');
+  const [quotas, setQuotas] = useState<Quota[]>([]);
 
-  useEffect(() => { loadUsers(); }, []);
+  useEffect(() => { loadData(); }, []);
 
-  const loadUsers = async () => {
+  const loadData = async () => {
     try {
-      const { data } = await api.get('/users');
-      setUsers(data);
-    } catch { toast.error('Failed to load users'); }
+      const [usersRes, quotasRes] = await Promise.all([
+        api.get('/users'),
+        api.get('/admin/quotas')
+      ]);
+      setUsers(usersRes.data);
+      setQuotas(quotasRes.data);
+    } catch { toast.error('Failed to load data'); }
     setLoading(false);
   };
 
@@ -35,7 +51,7 @@ export default function UsersPage() {
     try {
       await api.patch(`/users/${id}/activate`, { is_active: !current });
       toast.success(!current ? 'Account activated' : 'Account deactivated');
-      loadUsers();
+      loadData();
     } catch { toast.error('Failed to update status'); }
   };
 
@@ -44,7 +60,7 @@ export default function UsersPage() {
       await api.patch(`/users/${id}/promote`);
       toast.success('User promoted to admin successfully');
       setPromotingUser(null);
-      loadUsers();
+      loadData();
     } catch { toast.error('Failed to promote user'); }
   };
 
@@ -53,8 +69,20 @@ export default function UsersPage() {
       await api.patch(`/users/${id}/demote`);
       toast.success('Admin removed successfully');
       setDemotingUser(null);
-      loadUsers();
+      loadData();
     } catch { toast.error('Failed to demote user'); }
+  };
+
+  const assignQuota = async () => {
+    if (!editingQuotaUser) return;
+    try {
+      await api.patch(`/users/${editingQuotaUser.id}/quota`, { 
+        quota_id: selectedQuotaId === '' ? null : Number(selectedQuotaId) 
+      });
+      toast.success('Quota updated successfully');
+      setEditingQuotaUser(null);
+      loadData();
+    } catch { toast.error('Failed to update quota'); }
   };
 
   const filteredUsers = users.filter(u => 
@@ -72,8 +100,9 @@ export default function UsersPage() {
           <tr>
             <th>User</th>
             <th>Email</th>
+            <th>Academic Info</th>
             <th>Registered</th>
-            <th>Status</th>
+            <th>Quota</th>
             <th>Action</th>
           </tr>
         </thead>
@@ -83,13 +112,14 @@ export default function UsersPage() {
               <tr key={i}>
                 <td><div className="skeleton h-4 w-32" /></td>
                 <td><div className="skeleton h-4 w-40" /></td>
+                <td><div className="skeleton h-4 w-28" /></td>
                 <td><div className="skeleton h-4 w-24" /></td>
                 <td><div className="skeleton h-4 w-20" /></td>
                 <td><div className="skeleton h-4 w-24" /></td>
               </tr>
             ))
           ) : data.length === 0 ? (
-            <tr><td colSpan={5} className="text-center py-12 text-gray-500">
+            <tr><td colSpan={6} className="text-center py-12 text-gray-500">
               <Users className="w-12 h-12 mx-auto mb-3 opacity-50" />
               {emptyMessage}
             </td></tr>
@@ -105,11 +135,32 @@ export default function UsersPage() {
                   </div>
                 </td>
                 <td className="text-gray-400 text-sm">{u.email}</td>
-                <td className="text-gray-400 text-sm">{new Date(u.created_at).toLocaleDateString()}</td>
                 <td>
-                  <span className={u.is_active ? 'badge-emerald' : 'badge-rose'}>
-                    {u.is_active ? 'Active' : 'Inactive'}
-                  </span>
+                  {u.university ? (
+                    <div className="flex flex-col">
+                      <span className="text-white text-sm font-medium">{u.university}</span>
+                      <span className="text-xs text-gray-500">Year {u.study_year || '?'}</span>
+                    </div>
+                  ) : (
+                    <span className="text-gray-500 italic text-xs">Not specified</span>
+                  )}
+                </td>
+                <td className="text-gray-400 text-sm">{new Date(u.created_at).toLocaleDateString()}</td>
+                <td className="text-gray-400 text-sm">
+                  {u.role === 'admin' ? (
+                    <span className="text-gray-500 italic">N/A</span>
+                  ) : (
+                    <span 
+                      className={`px-2 py-1 rounded text-xs font-medium ${u.quota_id ? '' : 'bg-slate-800 text-gray-500'}`}
+                      style={u.quota_id ? { 
+                        backgroundColor: `${quotas.find(q => q.id === u.quota_id)?.color || '#10b981'}20`, 
+                        color: quotas.find(q => q.id === u.quota_id)?.color || '#10b981',
+                        border: `1px solid ${quotas.find(q => q.id === u.quota_id)?.color || '#10b981'}40`
+                      } : {}}
+                    >
+                      {u.quota_id ? quotas.find(q => q.id === u.quota_id)?.name || 'Unknown' : 'No Quota'}
+                    </span>
+                  )}
                 </td>
                 <td>
                   <div className="flex items-center gap-2">
@@ -142,6 +193,16 @@ export default function UsersPage() {
                       >
                         <ShieldOff className="w-3.5 h-3.5" />
                         Demote
+                      </button>
+                    )}
+                    {u.role === 'student' && (
+                      <button
+                        onClick={() => { setEditingQuotaUser(u); setSelectedQuotaId(u.quota_id || ''); }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20"
+                        title="Edit Quota"
+                      >
+                        <Shield className="w-3.5 h-3.5" />
+                        Quota
                       </button>
                     )}
                   </div>
@@ -256,6 +317,48 @@ export default function UsersPage() {
               >
                 <ShieldOff className="w-4 h-4" />
                 Yes, Demote
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editingQuotaUser && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-slate-800 shrink-0">
+              <h3 className="text-lg font-bold text-white">Assign Quota</h3>
+              <p className="text-sm text-gray-400">Update module access for {editingQuotaUser.full_name}</p>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Select Quota</label>
+                <select
+                  value={selectedQuotaId}
+                  onChange={(e) => setSelectedQuotaId(e.target.value === '' ? '' : Number(e.target.value))}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50"
+                >
+                  <option value="">-- No Quota (No Access) --</option>
+                  {quotas.map(q => (
+                    <option key={q.id} value={q.id}>{q.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            
+            <div className="p-6 border-t border-slate-800 shrink-0 flex justify-end gap-3 bg-slate-900/50">
+              <button
+                onClick={() => setEditingQuotaUser(null)}
+                className="px-5 py-2.5 rounded-xl text-sm font-medium text-gray-300 hover:bg-slate-800 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={assignQuota}
+                className="px-5 py-2.5 rounded-xl text-sm font-medium bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-500/20 transition-all"
+              >
+                Save Changes
               </button>
             </div>
           </div>

@@ -13,8 +13,17 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
+  const [university, setUniversity] = useState('');
+  const [studyYear, setStudyYear] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [universities, setUniversities] = useState<{id: number, name: string}[]>([]);
+
+  useEffect(() => {
+    if (!isLogin && universities.length === 0) {
+      api.get('/universities').then(res => setUniversities(res.data)).catch(console.error);
+    }
+  }, [isLogin, universities.length]);
 
   useEffect(() => {
     if (isAuthenticated()) {
@@ -41,8 +50,14 @@ export default function LoginPage() {
         if (user.role === 'admin') router.push('/admin/dashboard');
         else router.push('/student/home');
       } else {
-        await api.post('/auth/register', { email, password, full_name: fullName });
-        toast.success('Account created! Please wait for admin activation.');
+        await api.post('/auth/register', { 
+          email, 
+          password, 
+          full_name: fullName,
+          university: university || null,
+          study_year: studyYear ? parseInt(studyYear) : null
+        });
+        toast.success('Account created successfully! You can now sign in.');
         setIsLogin(true);
       }
     } catch (err: any) {
@@ -94,17 +109,47 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {!isLogin && (
-              <div className="animate-slide-up">
-                <label className="block text-sm font-medium text-gray-300 mb-1.5">Full Name</label>
-                <input
-                  id="full-name-input"
-                  type="text"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  placeholder="Dr. Ahmed Hassan"
-                  className="input-field"
-                  required={!isLogin}
-                />
+              <div className="animate-slide-up space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1.5">Full Name</label>
+                  <input
+                    id="full-name-input"
+                    type="text"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    placeholder="Dr. Ahmed Hassan"
+                    className="input-field"
+                    required={!isLogin}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-1.5">University (Optional)</label>
+                    <select
+                      value={university}
+                      onChange={(e) => setUniversity(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50 appearance-none"
+                    >
+                      <option value="">Select University...</option>
+                      {universities.map(u => (
+                        <option key={u.id} value={u.name}>{u.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-1.5">Study Year</label>
+                    <select
+                      value={studyYear}
+                      onChange={(e) => setStudyYear(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50 appearance-none"
+                    >
+                      <option value="">Select Year...</option>
+                      {[1, 2, 3, 4, 5].map(y => (
+                        <option key={y} value={y}>Year {y}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -162,7 +207,7 @@ export default function LoginPage() {
 
           {!isLogin && (
             <p className="text-xs text-gray-500 text-center mt-4">
-              New accounts require admin activation before access is granted.
+              By creating an account, you agree to our Terms of Service.
             </p>
           )}
         </div>

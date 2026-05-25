@@ -58,6 +58,18 @@ async def demote_from_admin(db: AsyncSession, user_id: int) -> User | None:
     return user
 
 
+async def assign_quota(db: AsyncSession, user_id: int, quota_id: int | None) -> User | None:
+    """Assign or remove a quota for a user."""
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if user is None:
+        return None
+    user.quota_id = quota_id
+    await db.flush()
+    await db.refresh(user)
+    return user
+
+
 async def update_profile(db: AsyncSession, user_id: int, full_name: str | None, university: str | None, study_year: int | None, is_anonymous: bool | None = None) -> User | None:
     """Update a user's profile fields."""
     result = await db.execute(select(User).where(User.id == user_id))

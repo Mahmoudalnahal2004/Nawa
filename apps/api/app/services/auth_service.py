@@ -23,7 +23,9 @@ async def create_user(
     password: str,
     full_name: str,
     role: UserRole = UserRole.STUDENT,
-    is_active: bool = False,
+    is_active: bool = True,
+    university: str | None = None,
+    study_year: int | None = None,
 ) -> User:
     """Create a new user account."""
     user = User(
@@ -32,7 +34,17 @@ async def create_user(
         full_name=full_name,
         role=role,
         is_active=is_active,
+        university=university,
+        study_year=study_year,
     )
+    
+    if role == UserRole.STUDENT:
+        from app.models.quota import Quota
+        result = await db.execute(select(Quota).where(Quota.is_default == True))
+        default_quota = result.scalar_one_or_none()
+        if default_quota:
+            user.quota_id = default_quota.id
+
     db.add(user)
     await db.flush()
     await db.refresh(user)

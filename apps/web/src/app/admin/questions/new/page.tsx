@@ -4,12 +4,13 @@ import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import api from '@/lib/api';
 import { toast } from 'sonner';
-import { ArrowLeft, Save, Upload as UploadIcon, Loader2, Bold, Italic, Image as ImageIcon } from 'lucide-react';
+import { ArrowLeft, Save, Upload as UploadIcon, Loader2, Bold, Italic, Image as ImageIcon, ChevronDown, ChevronRight, Check } from 'lucide-react';
 
 interface Category {
   id: number;
   name: string;
   parent_id: number | null;
+  target_year?: number | null;
 }
 
 export default function NewQuestionPage() {
@@ -170,14 +171,125 @@ export default function NewQuestionPage() {
             <h3 className="text-sm font-semibold text-white mb-4">Settings</h3>
 
             <div className="space-y-4">
-              <div>
+              <div className="relative">
                 <label className="block text-xs font-medium text-gray-400 mb-1.5">Category *</label>
-                <select value={form.category_id} onChange={(e) => handleChange('category_id', e.target.value)} className="select-field">
-                  <option value="">Select category</option>
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
+                {(() => {
+                  const [isCatOpen, setIsCatOpen] = useState(false);
+                  const [expandedYears, setExpandedYears] = useState<Record<number, boolean>>({});
+                  const [expandedMainCats, setExpandedMainCats] = useState<Record<number, boolean>>({});
+                  const selectedCatName = categories.find(c => c.id.toString() === form.category_id)?.name || 'Select category';
+
+                  const renderCategoryTree = (catsToRender: Category[]) => {
+                    const mainCats = catsToRender.filter(c => c.parent_id === null).sort((a, b) => a.name.localeCompare(b.name));
+                    return mainCats.map(mainCat => {
+                      const subCats = categories.filter(sub => sub.parent_id === mainCat.id).sort((a, b) => a.name.localeCompare(b.name));
+                      const isMainExpanded = expandedMainCats[mainCat.id];
+                      return (
+                        <div key={mainCat.id}>
+                          <div className="flex items-stretch">
+                            {subCats.length > 0 ? (
+                              <div
+                                className="pl-6 pr-2 flex items-center justify-center cursor-pointer hover:bg-white/5 text-gray-400"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setExpandedMainCats(prev => ({ ...prev, [mainCat.id]: !prev[mainCat.id] }));
+                                }}
+                              >
+                                {isMainExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                              </div>
+                            ) : (
+                              <div className="pl-6 pr-2 w-11 flex items-center justify-center"></div>
+                            )}
+                            <div
+                              className={`flex-1 pr-4 py-2 text-sm cursor-pointer transition-colors flex justify-between items-center ${form.category_id === mainCat.id.toString() ? 'text-emerald-400 bg-emerald-500/10' : 'text-gray-300 hover:bg-white/5'}`}
+                              onClick={() => {
+                                handleChange('category_id', mainCat.id.toString());
+                                setIsCatOpen(false);
+                              }}
+                            >
+                              {mainCat.name}
+                              {form.category_id === mainCat.id.toString() && <Check className="w-3.5 h-3.5" />}
+                            </div>
+                          </div>
+                          {isMainExpanded && subCats.length > 0 && (
+                            <div className="mb-1 bg-black/10">
+                              {subCats.map(subCat => (
+                                <div
+                                  key={subCat.id}
+                                  className={`pl-14 pr-4 py-2 text-sm cursor-pointer transition-colors flex justify-between items-center ${form.category_id === subCat.id.toString() ? 'text-emerald-400 bg-emerald-500/10' : 'text-gray-400 hover:text-gray-300 hover:bg-white/5'}`}
+                                  onClick={() => {
+                                    handleChange('category_id', subCat.id.toString());
+                                    setIsCatOpen(false);
+                                  }}
+                                >
+                                  {subCat.name}
+                                  {form.category_id === subCat.id.toString() && <Check className="w-3.5 h-3.5" />}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    });
+                  };
+
+                  return (
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setIsCatOpen(!isCatOpen)}
+                        className="select-field w-full flex justify-between items-center text-left"
+                      >
+                        <span className={!form.category_id ? "text-gray-500" : "text-white"}>{selectedCatName}</span>
+                        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${isCatOpen ? 'rotate-180' : ''}`} />
+                      </button>
+
+                      {isCatOpen && (
+                        <div className="absolute z-50 mt-2 w-[115%] -left-[7.5%] max-h-80 overflow-y-auto bg-navy-900 border border-white/10 rounded-xl shadow-xl py-2 scrollbar-thin">
+                          {[1, 2, 3, 4, 5].map(year => {
+                            const yearCats = categories.filter(c => c.target_year === year);
+                            if (yearCats.length === 0) return null;
+                            const isExpanded = expandedYears[year];
+                            return (
+                              <div key={year} className="mb-1">
+                                <div
+                                  className="px-3 py-2 flex items-center gap-2 cursor-pointer hover:bg-white/5 text-emerald-400 font-semibold text-sm transition-colors"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setExpandedYears(prev => ({ ...prev, [year]: !prev[year] }));
+                                  }}
+                                >
+                                  {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                                  Year {year}
+                                </div>
+                                {isExpanded && (
+                                  <div className="mb-1">
+                                    {renderCategoryTree(yearCats)}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                          {(() => {
+                            const otherCats = categories.filter(c => !c.target_year);
+                            if (otherCats.length === 0) return null;
+                            return (
+                              <div className="mb-1 mt-2 pt-2 border-t border-white/5">
+                                <div className="px-3 py-2 flex items-center gap-2 text-emerald-400 font-semibold text-sm">
+                                  <div className="w-3.5 h-3.5" />
+                                  Global / Other
+                                </div>
+                                <div>
+                                  {renderCategoryTree(otherCats)}
+                                </div>
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
 
               <div>

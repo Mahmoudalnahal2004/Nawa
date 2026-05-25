@@ -40,7 +40,14 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
     existing = await get_user_by_email(db, data.email)
     if existing:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
-    user = await create_user(db, email=data.email, password=data.password, full_name=data.full_name)
+    user = await create_user(
+        db, 
+        email=data.email, 
+        password=data.password, 
+        full_name=data.full_name,
+        university=data.university,
+        study_year=data.study_year
+    )
     return UserResponse.model_validate(user)
 
 

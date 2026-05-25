@@ -17,7 +17,7 @@ async def list_categories(
     db: AsyncSession = Depends(get_db), 
     user: User = Depends(get_current_active_user)
 ):
-    categories = await category_service.get_categories_tree(db, target_year=target_year, university=university)
+    categories = await category_service.get_categories_tree(db, user, target_year=target_year, university=university)
     from app.models.user import UserRole
     if user.role == UserRole.STUDENT:
         categories = [c for c in categories if c.get("is_active", True)]
@@ -28,10 +28,10 @@ async def list_categories(
 async def get_category_tree(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_active_user)):
     from app.models.user import UserRole
     if user.role == UserRole.STUDENT:
-        categories = await category_service.get_categories_tree(db, target_year=user.study_year, university=user.university)
+        categories = await category_service.get_categories_tree(db, user, target_year=user.study_year, university=user.university)
         categories = [c for c in categories if c.get("is_active", True)]
     else:
-        categories = await category_service.get_categories_tree(db)
+        categories = await category_service.get_categories_tree(db, user)
     tree = await category_service.build_category_tree(categories)
     return tree
 

@@ -40,8 +40,17 @@ async def get_questions_paginated(
     difficulty: Optional[str] = None,
 ) -> Tuple[List[dict], int]:
     """Get paginated questions with optional filters."""
-    query = select(Question, Category.name.label("category_name")).outerjoin(
+    from sqlalchemy.orm import aliased
+    ParentCategory = aliased(Category)
+
+    query = select(
+        Question, 
+        Category.name.label("category_name"),
+        ParentCategory.name.label("parent_name")
+    ).outerjoin(
         Category, Question.category_id == Category.id
+    ).outerjoin(
+        ParentCategory, Category.parent_id == ParentCategory.id
     )
 
     # Apply filters
@@ -75,10 +84,14 @@ async def get_questions_paginated(
     for row in result.all():
         q = row[0]
         cat_name = row[1]
+        parent_name = row[2]
+        
+        full_cat_name = f"{parent_name} - {cat_name}" if parent_name else cat_name
+        
         questions.append({
             "id": q.id,
             "category_id": q.category_id,
-            "category_name": cat_name,
+            "category_name": full_cat_name,
             "question_text": q.question_text,
             "image_url": q.image_url,
             "option_a": q.option_a,

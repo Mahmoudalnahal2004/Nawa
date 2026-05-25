@@ -11,6 +11,8 @@ class RegisterRequest(BaseModel):
     email: EmailStr
     password: str
     full_name: str
+    university: Optional[str] = None
+    study_year: Optional[int] = None
 
 
 class TokenResponse(BaseModel):

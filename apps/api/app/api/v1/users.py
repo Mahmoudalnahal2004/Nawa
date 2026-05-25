@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 from app.core.deps import get_db, RoleChecker, get_current_active_user
 from app.models.user import User
-from app.schemas.user import UserListResponse, UserToggleActive, ProfileUpdate, ProfileResponse, ChangePasswordRequest
+from app.schemas.user import UserListResponse, UserToggleActive, ProfileUpdate, ProfileResponse, ChangePasswordRequest, UserAssignQuota
 from app.services import user_service
 
 router = APIRouter(prefix="/users", tags=["User Management"])
@@ -20,6 +20,14 @@ async def list_all_users(db: AsyncSession = Depends(get_db)):
 @router.patch("/{user_id}/activate", response_model=UserListResponse, dependencies=[Depends(admin_only)])
 async def toggle_activation(user_id: int, data: UserToggleActive, db: AsyncSession = Depends(get_db)):
     user = await user_service.toggle_user_active(db, user_id, data.is_active)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    return UserListResponse.model_validate(user)
+
+
+@router.patch("/{user_id}/quota", response_model=UserListResponse, dependencies=[Depends(admin_only)])
+async def assign_user_quota(user_id: int, data: UserAssignQuota, db: AsyncSession = Depends(get_db)):
+    user = await user_service.assign_quota(db, user_id, data.quota_id)
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return UserListResponse.model_validate(user)

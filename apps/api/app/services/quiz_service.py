@@ -36,8 +36,23 @@ def _shuffle_options(question: Question) -> Tuple[dict, str]:
 
 
 async def start_quiz(db: AsyncSession, user_id: int, category_id: int, num_questions: int, mode: str = "practice", quiz_name: str | None = None, time_per_question: int = 60) -> QuizSessionResponse:
+    from app.models.user import User, UserRole
+    from app.models.quota import Quota
+    from sqlalchemy.orm import selectinload
+    from fastapi import HTTPException
+    
     if num_questions > 150:
         raise ValueError("Cannot request more than 150 questions")
+
+    # Check Quota
+    user_db = await db.execute(select(User).options(selectinload(User.quota).selectinload(Quota.categories)).where(User.id == user_id))
+    user_loaded = user_db.scalar_one()
+    if user_loaded.role == UserRole.STUDENT:
+        if not user_loaded.quota_id or not user_loaded.quota:
+            raise HTTPException(status_code=403, detail="No quota assigned. Access denied.")
+        allowed_category_ids = [cat.id for cat in user_loaded.quota.categories]
+        if category_id not in allowed_category_ids:
+            raise HTTPException(status_code=403, detail="This category is not in your assigned quota.")
 
     cat_result = await db.execute(select(Category).where(Category.id == category_id))
     category = cat_result.scalar_one_or_none()
@@ -284,9 +299,24 @@ async def get_quiz_availability(db: AsyncSession, user_id: int, mode: str) -> di
 
 async def generate_custom_quiz(db: AsyncSession, user_id: int, request) -> QuizSessionResponse:
     from app.models.bookmark import Bookmark
+    from app.models.user import User, UserRole
+    from app.models.quota import Quota
+    from sqlalchemy.orm import selectinload
+    from fastapi import HTTPException
     
     if request.question_count > 150:
         raise ValueError("Cannot request more than 150 questions")
+
+    # Check Quota
+    user_db = await db.execute(select(User).options(selectinload(User.quota).selectinload(Quota.categories)).where(User.id == user_id))
+    user_loaded = user_db.scalar_one()
+    if user_loaded.role == UserRole.STUDENT:
+        if not user_loaded.quota_id or not user_loaded.quota:
+            raise HTTPException(status_code=403, detail="No quota assigned. Access denied.")
+        allowed_category_ids = [cat.id for cat in user_loaded.quota.categories]
+        for req_cat_id in request.category_ids:
+            if req_cat_id not in allowed_category_ids:
+                raise HTTPException(status_code=403, detail=f"Category {req_cat_id} is not in your assigned quota.")
 
     conds = [
         Question.category_id.in_(request.category_ids),

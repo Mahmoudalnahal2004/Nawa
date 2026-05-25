@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
-import { Loader2, Plus, Pencil, Trash2, FolderTree, CornerDownRight, X, LayoutTemplate, Image as ImageIcon, Upload, Eye, EyeOff } from 'lucide-react';
+import { Loader2, Plus, Pencil, Trash2, FolderTree, CornerDownRight, X, LayoutTemplate, Image as ImageIcon, Upload, Eye, EyeOff, ChevronRight, ChevronDown } from 'lucide-react';
 
 interface Category {
   id: number;
@@ -38,6 +38,13 @@ export default function AdminCategoriesPage() {
   const [saving, setSaving] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [yearFilter, setYearFilter] = useState<string>('All');
+  const [expandedCategories, setExpandedCategories] = useState<number[]>([]);
+
+  const toggleExpand = (id: number) => {
+    setExpandedCategories(prev => 
+      prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]
+    );
+  };
 
   useEffect(() => {
     fetchCategories();
@@ -212,6 +219,11 @@ export default function AdminCategoriesPage() {
                     </div>
                     <div>
                       <h3 className={`font-semibold flex items-center gap-2 ${!module.is_active ? 'text-gray-500' : 'text-white'}`}>
+                        {module.children && module.children.length > 0 && (
+                          <button onClick={() => toggleExpand(module.id)} className="p-0.5 hover:bg-white/10 rounded-md transition-colors text-gray-400">
+                            {expandedCategories.includes(module.id) ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                          </button>
+                        )}
                         <span className={!module.is_active ? 'line-through' : ''}>{module.name}</span>
                         {module.target_year && (
                           <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/20">
@@ -228,7 +240,7 @@ export default function AdminCategoriesPage() {
                         )}
                       </h3>
                       <p className="text-xs text-gray-400 mt-0.5">
-                        {module.description || 'No description provided'} • {module.question_count || 0} Questions
+                        {module.description || 'No description provided'} • {(module.question_count || 0) + (module.children?.reduce((sum, child) => sum + (child.question_count || 0), 0) || 0)} Questions
                       </p>
                     </div>
                   </div>
@@ -252,7 +264,7 @@ export default function AdminCategoriesPage() {
                 </div>
 
                 {/* Subcategories */}
-                {module.children && module.children.length > 0 && (
+                {module.children && module.children.length > 0 && expandedCategories.includes(module.id) && (
                   <div className="mt-3 pl-14 space-y-2">
                     {module.children.map(sub => (
                       <div key={sub.id} className="flex items-center justify-between p-3 rounded-lg bg-slate-900/50 border border-white/5 group/sub">
@@ -388,11 +400,32 @@ export default function AdminCategoriesPage() {
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500 appearance-none"
                   >
                     <option value="">-- None (Top-Level) --</option>
-                    {categories.map(c => (
-                      <option key={c.id} value={c.id} disabled={editingCategory?.id === c.id}>
-                        {c.name}
-                      </option>
-                    ))}
+                    {[1, 2, 3, 4, 5].map(year => {
+                      const yearCats = categories.filter(c => c.target_year === year);
+                      if (yearCats.length === 0) return null;
+                      return (
+                        <optgroup key={year} label={`Year ${year}`} className="bg-slate-900 text-emerald-400 font-semibold">
+                          {yearCats.sort((a, b) => a.name.localeCompare(b.name)).map(c => (
+                            <option key={c.id} value={c.id} disabled={editingCategory?.id === c.id} className="bg-slate-900 text-white">
+                              {c.name}
+                            </option>
+                          ))}
+                        </optgroup>
+                      );
+                    })}
+                    {(() => {
+                      const otherCats = categories.filter(c => !c.target_year);
+                      if (otherCats.length === 0) return null;
+                      return (
+                        <optgroup label="Global / Other" className="bg-slate-900 text-emerald-400 font-semibold">
+                          {otherCats.sort((a, b) => a.name.localeCompare(b.name)).map(c => (
+                            <option key={c.id} value={c.id} disabled={editingCategory?.id === c.id} className="bg-slate-900 text-white">
+                              {c.name}
+                            </option>
+                          ))}
+                        </optgroup>
+                      );
+                    })()}
                   </select>
                 </div>
               </div>

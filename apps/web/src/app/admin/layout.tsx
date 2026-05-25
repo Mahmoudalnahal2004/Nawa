@@ -5,15 +5,16 @@ import { useRouter, usePathname } from 'next/navigation';
 import { isAuthenticated, getStoredUser, clearAuth } from '@/lib/auth';
 import {
   LayoutDashboard, FileQuestion, FolderTree, Users, LogOut,
-  Menu, X, Stethoscope, ChevronRight, Settings, BookOpen
+  Menu, X, Stethoscope, ChevronRight, Settings, BookOpen, ShieldCheck
 } from 'lucide-react';
 
 const navItems = [
   { href: '/admin/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { href: '/admin/questions', icon: FileQuestion, label: 'Questions' },
   { href: '/admin/categories', icon: FolderTree, label: 'Categories' },
-  { href: '/admin/users', icon: Users, label: 'Students' },
   { href: '/admin/materials', icon: BookOpen, label: 'Study Materials' },
+  { href: '/admin/users', icon: Users, label: 'Students' },
+  { href: '/admin/quotas', icon: ShieldCheck, label: 'Quotas' },
   { href: '/admin/settings', icon: Settings, label: 'Settings' },
 ];
 
@@ -90,18 +91,18 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
           {/* User */}
           <div className="px-4 py-4 border-t border-white/5">
-            <div className="flex items-center gap-3 px-4 py-3">
+            <div className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/5 transition-colors group cursor-pointer" onClick={() => { router.push('/admin/profile'); setSidebarOpen(false); }}>
               <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center">
                 <span className="text-emerald-400 text-sm font-bold">{user.full_name?.[0] || 'A'}</span>
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-white truncate">{user.full_name}</p>
+                <p className="text-sm font-medium text-white truncate group-hover:text-emerald-400 transition-colors">{user.full_name}</p>
                 <p className="text-xs text-gray-500 truncate">{user.email}</p>
               </div>
-              <button onClick={() => router.push('/student/home')} className="text-gray-400 hover:text-emerald-400 transition-colors" title="Switch to Student Panel">
+              <button onClick={(e) => { e.stopPropagation(); router.push('/student/home'); }} className="text-gray-400 hover:text-emerald-400 transition-colors" title="Switch to Student Panel">
                 <BookOpen className="w-4 h-4" />
               </button>
-              <button onClick={handleLogout} className="text-gray-400 hover:text-rose-400 transition-colors" title="Logout">
+              <button onClick={(e) => { e.stopPropagation(); handleLogout(); }} className="text-gray-400 hover:text-rose-400 transition-colors" title="Logout">
                 <LogOut className="w-4 h-4" />
               </button>
             </div>

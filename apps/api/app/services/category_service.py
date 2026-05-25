@@ -6,6 +6,8 @@ from sqlalchemy.orm import selectinload
 
 from app.models.category import Category
 from app.models.question import Question
+from app.models.user import User, UserRole
+from app.models.quota import Quota
 from app.schemas.category import CategoryCreate, CategoryUpdate, CategoryResponse, CategoryTreeResponse
 
 
@@ -31,7 +33,7 @@ async def create_category(db: AsyncSession, data: CategoryCreate) -> Category:
     return category
 
 
-async def get_categories_tree(db: AsyncSession, target_year: int | None = None, university: str | None = None) -> List[dict]:
+async def get_categories_tree(db: AsyncSession, user: User, target_year: int | None = None, university: str | None = None) -> List[dict]:
     """Get all categories as a flat list with question counts."""
     # Subquery for question counts
     question_count_subq = (
@@ -55,6 +57,18 @@ async def get_categories_tree(db: AsyncSession, target_year: int | None = None, 
         
     if university is not None:
         query = query.where(or_(Category.university == None, Category.university == university))
+
+    if user.role == UserRole.STUDENT:
+        user_db = await db.execute(select(User).options(selectinload(User.quota).selectinload(Quota.categories)).where(User.id == user.id))
+        user_loaded = user_db.scalar_one()
+        if not user_loaded.quota_id or not user_loaded.quota:
+            return []
+            
+        allowed_category_ids = [cat.id for cat in user_loaded.quota.categories]
+        if not allowed_category_ids:
+            return []
+            
+        query = query.where(Category.id.in_(allowed_category_ids))
 
     result = await db.execute(query.order_by(Category.name))
 
