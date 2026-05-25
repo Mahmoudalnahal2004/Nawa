@@ -70,6 +70,7 @@ async def get_categories_tree(db: AsyncSession, target_year: int | None = None, 
             "parent_id": cat.parent_id,
             "target_year": cat.target_year,
             "university": cat.university,
+            "is_active": cat.is_active,
             "created_at": cat.created_at,
             "question_count": count,
         })

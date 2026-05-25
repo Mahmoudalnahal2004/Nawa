@@ -5,7 +5,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { isAuthenticated, getStoredUser, clearAuth } from '@/lib/auth';
 import {
   LayoutDashboard, FileQuestion, FolderTree, Users, LogOut,
-  Menu, X, Stethoscope, ChevronRight, Settings,
+  Menu, X, Stethoscope, ChevronRight, Settings, BookOpen
 } from 'lucide-react';
 
 const navItems = [
@@ -13,6 +13,7 @@ const navItems = [
   { href: '/admin/questions', icon: FileQuestion, label: 'Questions' },
   { href: '/admin/categories', icon: FolderTree, label: 'Categories' },
   { href: '/admin/users', icon: Users, label: 'Students' },
+  { href: '/admin/materials', icon: BookOpen, label: 'Study Materials' },
   { href: '/admin/settings', icon: Settings, label: 'Settings' },
 ];
 
@@ -97,6 +98,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 <p className="text-sm font-medium text-white truncate">{user.full_name}</p>
                 <p className="text-xs text-gray-500 truncate">{user.email}</p>
               </div>
+              <button onClick={() => router.push('/student/home')} className="text-gray-400 hover:text-emerald-400 transition-colors" title="Switch to Student Panel">
+                <BookOpen className="w-4 h-4" />
+              </button>
               <button onClick={handleLogout} className="text-gray-400 hover:text-rose-400 transition-colors" title="Logout">
                 <LogOut className="w-4 h-4" />
               </button>

@@ -4,14 +4,16 @@ import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { isAuthenticated, getStoredUser, clearAuth } from '@/lib/auth';
 import {
-  LayoutDashboard, AlertTriangle, LogOut, Menu, X, Stethoscope, ChevronRight, BookOpen, UserCircle2, History, Trophy, Flame, Home
+  LayoutDashboard, AlertTriangle, LogOut, Menu, X, Stethoscope, ChevronRight, BookOpen, UserCircle2, History, Trophy, Flame, Home, NotepadText, Crown
 } from 'lucide-react';
 
 const navItems = [
   { href: '/student/home', icon: Home, label: 'Home' },
   { href: '/student/dashboard', icon: LayoutDashboard, label: 'Create Quiz' },
+  { href: '/student/study', icon: BookOpen, label: 'Study Hub' },
   { href: '/student/weak-points', icon: AlertTriangle, label: 'Weak Points' },
   { href: '/student/history', icon: History, label: 'History & Analytics' },
+  { href: '/student/notes', icon: NotepadText, label: 'My Notes' },
   { href: '/student/leaderboard', icon: Trophy, label: 'Leaderboard' },
   { href: '/student/profile', icon: UserCircle2, label: 'My Profile' },
 ];
@@ -26,7 +28,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
   useEffect(() => {
     if (!isAuthenticated()) { router.push('/login'); return; }
     const u = getStoredUser();
-    if (u?.role !== 'student') { router.push('/admin/dashboard'); return; }
+    if (u?.role !== 'student' && u?.role !== 'admin') { router.push('/login'); return; }
     setUser(u);
     // Fetch streak from backend
     import('@/lib/api').then(mod => {
@@ -83,6 +85,11 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
                 <p className="text-sm font-medium text-white truncate">{user.full_name}</p>
                 <p className="text-xs text-gray-500 truncate">{user.email}</p>
               </div>
+              {user.role === 'admin' && (
+                <button onClick={() => router.push('/admin/dashboard')} className="text-gray-400 hover:text-amber-400 transition-colors" title="Switch to Admin Panel">
+                  <Crown className="w-4 h-4" />
+                </button>
+              )}
               <button onClick={handleLogout} className="text-gray-400 hover:text-rose-400 transition-colors" title="Logout">
                 <LogOut className="w-4 h-4" />
               </button>

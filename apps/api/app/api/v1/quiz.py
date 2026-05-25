@@ -12,7 +12,7 @@ student_only = RoleChecker(["student"])
 @router.post("/start", response_model=QuizSessionResponse, dependencies=[Depends(student_only)])
 async def start_quiz(data: QuizStartRequest, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_active_user)):
     try:
-        return await quiz_service.start_quiz(db, user.id, data.category_id, data.num_questions, data.mode, data.quiz_name)
+        return await quiz_service.start_quiz(db, user.id, data.category_id, data.num_questions, data.mode, data.quiz_name, data.time_per_question)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -70,7 +70,8 @@ async def get_quiz(session_id: str, db: AsyncSession = Depends(get_db), user: Us
         current_question_index=session.get("current_question_index", 0),
         answers=session.get("answers", []),
         exam_answers=session.get("exam_answers", {}),
-        flagged_questions=session.get("flagged_questions", {})
+        flagged_questions=session.get("flagged_questions", {}),
+        time_per_question=session.get("time_per_question", 60)
     )
 
 

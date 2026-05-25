@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import api from '@/lib/api';
 import { toast } from 'sonner';
 import { ArrowLeft, Save, Upload as UploadIcon, Loader2, Bold, Italic, Image as ImageIcon } from 'lucide-react';
@@ -14,10 +14,11 @@ interface Category {
 
 export default function NewQuestionPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
-    category_id: '',
+    category_id: searchParams.get('categoryId') || '',
     question_text: '',
     option_a: '', option_b: '', option_c: '', option_d: '', option_e: '',
     correct_answer: '',

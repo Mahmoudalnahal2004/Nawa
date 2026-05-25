@@ -17,3 +17,12 @@ class NoteResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class NoteWithQuestionResponse(NoteResponse):
+    question_text: str
+
+
+class NotePaginatedResponse(BaseModel):
+    items: list[NoteWithQuestionResponse]
+    total: int

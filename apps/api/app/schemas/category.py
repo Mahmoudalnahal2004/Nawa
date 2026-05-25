@@ -19,6 +19,7 @@ class CategoryUpdate(BaseModel):
     parent_id: Optional[int] = None
     target_year: Optional[int] = None
     university: Optional[str] = None
+    is_active: Optional[bool] = None
 
 
 class CategoryResponse(BaseModel):
@@ -29,6 +30,7 @@ class CategoryResponse(BaseModel):
     parent_id: Optional[int]
     target_year: Optional[int] = None
     university: Optional[str] = None
+    is_active: bool = True
     created_at: datetime
     question_count: Optional[int] = 0
 

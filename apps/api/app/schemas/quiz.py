@@ -6,6 +6,7 @@ class QuizStartRequest(BaseModel):
     num_questions: int
     mode: Literal['practice', 'exam'] = 'practice'
     quiz_name: Optional[str] = None
+    time_per_question: int = 60
 
 
 class QuizQuestion(BaseModel):
@@ -46,6 +47,7 @@ class QuizSessionResponse(BaseModel):
     answers: List[AnswerFeedback] = []
     exam_answers: Optional[dict] = None
     flagged_questions: Optional[dict] = None
+    time_per_question: int = 60
 
 
 class QuizResultSummary(BaseModel):
@@ -71,6 +73,7 @@ class QuizGenerateRequest(BaseModel):
     mode: Literal['Unused', 'Incorrect', 'Bookmarked', 'All']
     quiz_mode: Literal['practice', 'exam'] = 'practice'
     quiz_name: Optional[str] = None
+    time_per_question: int = 60
 
 
 class PauseSessionRequest(BaseModel):

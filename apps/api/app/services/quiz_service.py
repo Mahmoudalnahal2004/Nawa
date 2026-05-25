@@ -35,7 +35,7 @@ def _shuffle_options(question: Question) -> Tuple[dict, str]:
     return shuffled, new_correct
 
 
-async def start_quiz(db: AsyncSession, user_id: int, category_id: int, num_questions: int, mode: str = "practice", quiz_name: str | None = None) -> QuizSessionResponse:
+async def start_quiz(db: AsyncSession, user_id: int, category_id: int, num_questions: int, mode: str = "practice", quiz_name: str | None = None, time_per_question: int = 60) -> QuizSessionResponse:
     if num_questions > 150:
         raise ValueError("Cannot request more than 150 questions")
 
@@ -88,7 +88,8 @@ async def start_quiz(db: AsyncSession, user_id: int, category_id: int, num_quest
         exam_answers={},
         flagged_questions={},
         status="in_progress",
-        current_question_index=0
+        current_question_index=0,
+        time_per_question=time_per_question
     )
     db.add(db_session)
     await db.commit()
@@ -99,7 +100,8 @@ async def start_quiz(db: AsyncSession, user_id: int, category_id: int, num_quest
         session_id=session_id, mode=mode, questions=q_objects, 
         total_questions=len(quiz_questions), category_name=category.name,
         quiz_name=quiz_name or category.name,
-        status="in_progress", current_question_index=0
+        status="in_progress", current_question_index=0,
+        time_per_question=time_per_question
     )
 
 
@@ -231,7 +233,8 @@ async def get_quiz_session(db: AsyncSession, session_id: str) -> dict | None:
         "flagged_questions": db_session.flagged_questions,
         "created_at": db_session.created_at.isoformat() if db_session.created_at else None,
         "status": db_session.status,
-        "current_question_index": db_session.current_question_index
+        "current_question_index": db_session.current_question_index,
+        "time_per_question": db_session.time_per_question
     }
 
 
@@ -337,7 +340,8 @@ async def generate_custom_quiz(db: AsyncSession, user_id: int, request) -> QuizS
         exam_answers={},
         flagged_questions={},
         status="in_progress",
-        current_question_index=0
+        current_question_index=0,
+        time_per_question=request.time_per_question
     )
     db.add(db_session)
     await db.commit()
@@ -348,7 +352,8 @@ async def generate_custom_quiz(db: AsyncSession, user_id: int, request) -> QuizS
         questions=q_objects, total_questions=len(quiz_questions), 
         category_name="Custom Generated Quiz",
         quiz_name=request.quiz_name or "Custom Generated Quiz",
-        status="in_progress", current_question_index=0
+        status="in_progress", current_question_index=0,
+        time_per_question=request.time_per_question
     )
 
 
@@ -374,12 +379,25 @@ async def delete_quiz_session(db: AsyncSession, session_id: str, user_id: int) -
     question_ids = [a["question_id"] for a in db_session.answers]
     
     if question_ids:
-        await db.execute(
-            delete(UserProgress).where(
-                UserProgress.user_id == user_id,
-                UserProgress.question_id.in_(question_ids)
-            )
+        # Check other sessions to avoid deleting progress for questions answered elsewhere
+        other_sessions = await db.execute(
+            select(QuizSession).where(QuizSession.user_id == user_id, QuizSession.id != session_id)
         )
+        
+        other_answered_ids = set()
+        for sess in other_sessions.scalars().all():
+            for a in sess.answers:
+                other_answered_ids.add(a["question_id"])
+                
+        ids_to_delete = [qid for qid in question_ids if qid not in other_answered_ids]
+        
+        if ids_to_delete:
+            await db.execute(
+                delete(UserProgress).where(
+                    UserProgress.user_id == user_id,
+                    UserProgress.question_id.in_(ids_to_delete)
+                )
+            )
         
     await db.delete(db_session)
     await db.commit()

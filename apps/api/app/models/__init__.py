@@ -6,5 +6,6 @@ from app.models.university import University
 from app.models.note import Note
 from app.models.bookmark import Bookmark
 from app.models.quiz_session import QuizSession
+from app.models.study_material import StudyMaterial
 
-__all__ = ["User", "Category", "Question", "UserProgress", "University", "Note", "Bookmark", "QuizSession"]
+__all__ = ["User", "Category", "Question", "UserProgress", "University", "Note", "Bookmark", "QuizSession", "StudyMaterial"]

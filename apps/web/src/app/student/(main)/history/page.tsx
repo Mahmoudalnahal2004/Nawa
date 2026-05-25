@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import { toast } from 'sonner';
-import { Loader2, TrendingUp, TrendingDown, Target, CheckCircle2, XCircle, Clock, BookOpen, Timer, Edit2, Trash2, ShieldAlert, Bookmark } from 'lucide-react';
+import { Loader2, TrendingUp, TrendingDown, Target, CheckCircle2, XCircle, Clock, BookOpen, Timer, Edit2, Trash2, ShieldAlert, Bookmark, NotepadText } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 interface AnalyticsData {
@@ -38,6 +38,7 @@ export default function HistoryDashboard() {
   const router = useRouter();
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [bookmarksCount, setBookmarksCount] = useState(0);
+  const [notesCount, setNotesCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [renameState, setRenameState] = useState<{isOpen: boolean; sessionId: string; currentName: string; newName: string; saving: boolean}>({
     isOpen: false, sessionId: '', currentName: '', newName: '', saving: false
@@ -52,12 +53,14 @@ export default function HistoryDashboard() {
 
   const loadAnalytics = async () => {
     try {
-      const [res, bookmarksRes] = await Promise.all([
+      const [res, bookmarksRes, notesRes] = await Promise.all([
         api.get('/analytics/me'),
-        api.get('/bookmarks?page_size=1')
+        api.get('/bookmarks?page_size=1'),
+        api.get('/notes?limit=1')
       ]);
       setData(res.data);
       setBookmarksCount(bookmarksRes.data.total);
+      setNotesCount(notesRes.data.total);
     } catch (err) {
       toast.error('Failed to load history and analytics');
     } finally {
@@ -181,7 +184,7 @@ export default function HistoryDashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Bookmarked Questions Card */}
         <div className="glass-card p-6 flex flex-col justify-between bg-gradient-to-br from-slate-900 to-amber-950/20 border border-amber-500/10">
           <div className="mb-6">
@@ -211,6 +214,22 @@ export default function HistoryDashboard() {
             className="w-full py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-[0.98] bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-500/30 border border-rose-400/30"
           >
             Review Incorrect Answers
+          </button>
+        </div>
+
+        {/* My Notes Card */}
+        <div className="glass-card p-6 flex flex-col justify-between bg-gradient-to-br from-slate-900 to-blue-950/20 border border-blue-500/10">
+          <div className="mb-6">
+            <h2 className="text-xl font-bold text-white flex items-center gap-2 mb-2">
+              <NotepadText className="w-5 h-5 text-blue-400" /> My Notes
+            </h2>
+            <p className="text-sm text-gray-400">Review and search all the notes you've taken on questions. <span className="text-blue-400 font-bold ml-1 border border-blue-500/20 bg-blue-500/10 px-2 py-0.5 rounded-md">({notesCount} saved)</span></p>
+          </div>
+          <button 
+            onClick={() => router.push('/student/notes')} 
+            className="w-full py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-[0.98] bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-500/30 border border-blue-400/30"
+          >
+            Review Notes
           </button>
         </div>
       </div>

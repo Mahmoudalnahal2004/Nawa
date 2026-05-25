@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import { toast } from 'sonner';
-import { Loader2, Plus, Pencil, Trash2, FolderTree, CornerDownRight, X, LayoutTemplate, Image as ImageIcon, Upload } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Loader2, Plus, Pencil, Trash2, FolderTree, CornerDownRight, X, LayoutTemplate, Image as ImageIcon, Upload, Eye, EyeOff } from 'lucide-react';
 
 interface Category {
   id: number;
@@ -13,10 +14,12 @@ interface Category {
   parent_id: number | null;
   target_year?: number | null;
   question_count: number;
+  is_active: boolean;
   children?: Category[];
 }
 
 export default function AdminCategoriesPage() {
+  const router = useRouter();
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   
@@ -81,6 +84,16 @@ export default function AdminCategoriesPage() {
       fetchCategories();
     } catch (e: any) {
       toast.error(e.response?.data?.detail || 'Failed to delete category');
+    }
+  };
+
+  const handleToggleActive = async (module: Category) => {
+    try {
+      await api.put(`/categories/${module.id}`, { is_active: !module.is_active });
+      toast.success(module.is_active ? 'Category hidden' : 'Category visible');
+      fetchCategories();
+    } catch (e: any) {
+      toast.error('Failed to update visibility');
     }
   };
 
@@ -190,7 +203,7 @@ export default function AdminCategoriesPage() {
                 {/* Top-Level Module Row */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center border border-blue-500/20 overflow-hidden text-2xl">
+                    <div className={`w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center border border-blue-500/20 overflow-hidden text-2xl ${!module.is_active ? 'opacity-40 grayscale' : ''}`}>
                       {module.icon?.startsWith('/') ? (
                         <img src={`http://localhost:8000${module.icon}`} alt={module.name} className="w-full h-full object-cover" />
                       ) : (
@@ -198,8 +211,8 @@ export default function AdminCategoriesPage() {
                       )}
                     </div>
                     <div>
-                      <h3 className="text-white font-semibold flex items-center gap-2">
-                        {module.name}
+                      <h3 className={`font-semibold flex items-center gap-2 ${!module.is_active ? 'text-gray-500' : 'text-white'}`}>
+                        <span className={!module.is_active ? 'line-through' : ''}>{module.name}</span>
                         {module.target_year && (
                           <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/20">
                             Year {module.target_year}
@@ -208,6 +221,11 @@ export default function AdminCategoriesPage() {
                         <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-white/10 text-gray-400">
                           ID: {module.id}
                         </span>
+                        {!module.is_active && (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/20">
+                            Hidden
+                          </span>
+                        )}
                       </h3>
                       <p className="text-xs text-gray-400 mt-0.5">
                         {module.description || 'No description provided'} • {module.question_count || 0} Questions
@@ -215,6 +233,15 @@ export default function AdminCategoriesPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button onClick={() => handleToggleActive(module)} className={`p-2 rounded-lg transition-colors ${module.is_active ? 'bg-white/5 hover:bg-amber-500/20 text-gray-400 hover:text-amber-400' : 'bg-rose-500/10 text-rose-400 hover:bg-emerald-500/20 hover:text-emerald-400'}`} title={module.is_active ? "Hide Module" : "Show Module"}>
+                      {module.is_active ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                    </button>
+                    <button onClick={() => router.push(`/admin/questions/new?categoryId=${module.id}`)} className="p-2 rounded-lg bg-white/5 hover:bg-emerald-500/20 text-gray-400 hover:text-emerald-400 transition-colors" title="Create Question">
+                      <Plus className="w-4 h-4" />
+                    </button>
+                    <button onClick={() => router.push(`/admin/questions?importCategoryId=${module.id}`)} className="p-2 rounded-lg bg-white/5 hover:bg-emerald-500/20 text-gray-400 hover:text-emerald-400 transition-colors" title="Import Questions">
+                      <Upload className="w-4 h-4" />
+                    </button>
                     <button onClick={() => openEditModal(module)} className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors" title="Edit Module">
                       <Pencil className="w-4 h-4" />
                     </button>
@@ -230,13 +257,18 @@ export default function AdminCategoriesPage() {
                     {module.children.map(sub => (
                       <div key={sub.id} className="flex items-center justify-between p-3 rounded-lg bg-slate-900/50 border border-white/5 group/sub">
                         <div className="flex items-center gap-3">
-                          <CornerDownRight className="w-4 h-4 text-gray-600" />
+                          <CornerDownRight className={`w-4 h-4 ${!sub.is_active ? 'text-gray-700' : 'text-gray-600'}`} />
                           <div>
-                            <p className="text-sm font-medium text-gray-200 flex items-center gap-2">
-                              {sub.name}
+                            <p className={`text-sm font-medium flex items-center gap-2 ${!sub.is_active ? 'text-gray-500' : 'text-gray-200'}`}>
+                              <span className={!sub.is_active ? 'line-through' : ''}>{sub.name}</span>
                               {sub.target_year && (
                                 <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                                   Year {sub.target_year}
+                                </span>
+                              )}
+                              {!sub.is_active && (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-400 border border-rose-500/20">
+                                  Hidden
                                 </span>
                               )}
                             </p>
@@ -244,10 +276,19 @@ export default function AdminCategoriesPage() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2 opacity-0 group-hover/sub:opacity-100 transition-opacity">
-                          <button onClick={() => openEditModal(sub)} className="p-1.5 rounded-md bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors">
+                          <button onClick={() => handleToggleActive(sub)} className={`p-1.5 rounded-md transition-colors ${sub.is_active ? 'bg-white/5 hover:bg-amber-500/20 text-gray-400 hover:text-amber-400' : 'bg-rose-500/10 text-rose-400 hover:bg-emerald-500/20 hover:text-emerald-400'}`} title={sub.is_active ? "Hide Module" : "Show Module"}>
+                            {sub.is_active ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                          </button>
+                          <button onClick={() => router.push(`/admin/questions/new?categoryId=${sub.id}`)} className="p-1.5 rounded-md bg-white/5 hover:bg-emerald-500/20 text-gray-400 hover:text-emerald-400 transition-colors" title="Create Question">
+                            <Plus className="w-3.5 h-3.5" />
+                          </button>
+                          <button onClick={() => router.push(`/admin/questions?importCategoryId=${sub.id}`)} className="p-1.5 rounded-md bg-white/5 hover:bg-emerald-500/20 text-gray-400 hover:text-emerald-400 transition-colors" title="Import Questions">
+                            <Upload className="w-3.5 h-3.5" />
+                          </button>
+                          <button onClick={() => openEditModal(sub)} className="p-1.5 rounded-md bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors" title="Edit Module">
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
-                          <button onClick={() => handleDelete(sub.id, sub.name)} className="p-1.5 rounded-md bg-white/5 hover:bg-rose-500/20 text-gray-400 hover:text-rose-400 transition-colors">
+                          <button onClick={() => handleDelete(sub.id, sub.name)} className="p-1.5 rounded-md bg-white/5 hover:bg-rose-500/20 text-gray-400 hover:text-rose-400 transition-colors" title="Delete Module">
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>

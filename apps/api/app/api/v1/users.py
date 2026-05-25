@@ -12,9 +12,9 @@ admin_only = RoleChecker(["admin"])
 
 
 @router.get("", response_model=List[UserListResponse], dependencies=[Depends(admin_only)])
-async def list_students(db: AsyncSession = Depends(get_db)):
-    students = await user_service.list_students(db)
-    return [UserListResponse.model_validate(s) for s in students]
+async def list_all_users(db: AsyncSession = Depends(get_db)):
+    users = await user_service.list_all_users(db)
+    return [UserListResponse.model_validate(u) for u in users]
 
 
 @router.patch("/{user_id}/activate", response_model=UserListResponse, dependencies=[Depends(admin_only)])
@@ -22,6 +22,22 @@ async def toggle_activation(user_id: int, data: UserToggleActive, db: AsyncSessi
     user = await user_service.toggle_user_active(db, user_id, data.is_active)
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    return UserListResponse.model_validate(user)
+
+
+@router.patch("/{user_id}/promote", response_model=UserListResponse, dependencies=[Depends(admin_only)])
+async def promote_to_admin(user_id: int, db: AsyncSession = Depends(get_db)):
+    user = await user_service.promote_to_admin(db, user_id)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    return UserListResponse.model_validate(user)
+
+
+@router.patch("/{user_id}/demote", response_model=UserListResponse, dependencies=[Depends(admin_only)])
+async def demote_from_admin(user_id: int, db: AsyncSession = Depends(get_db)):
+    user = await user_service.demote_from_admin(db, user_id)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot demote user or user not found")
     return UserListResponse.model_validate(user)
 
 

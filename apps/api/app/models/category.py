@@ -15,6 +15,7 @@ class Category(Base):
     icon: Mapped[str] = mapped_column(String(100), nullable=True, default="📚")
     target_year: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
     university: Mapped[str | None] = mapped_column(String(255), nullable=True, default=None)
+    is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
     parent_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("categories.id", ondelete="SET NULL"),

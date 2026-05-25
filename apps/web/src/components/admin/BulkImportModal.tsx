@@ -9,9 +9,10 @@ interface BulkImportModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  categoryId?: number;
 }
 
-export function BulkImportModal({ isOpen, onClose, onSuccess }: BulkImportModalProps) {
+export function BulkImportModal({ isOpen, onClose, onSuccess, categoryId }: BulkImportModalProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
@@ -60,6 +61,9 @@ export function BulkImportModal({ isOpen, onClose, onSuccess }: BulkImportModalP
     setLoading(true);
     const formData = new FormData();
     formData.append('file', file);
+    if (categoryId) {
+      formData.append('category_id', categoryId.toString());
+    }
 
     try {
       const { data } = await api.post('/questions/import', formData, {

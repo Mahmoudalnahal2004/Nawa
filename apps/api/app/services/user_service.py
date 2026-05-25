@@ -7,11 +7,10 @@ from app.models.user import User, UserRole
 from app.core.security import verify_password, hash_password
 
 
-async def list_students(db: AsyncSession) -> List[User]:
-    """List all student accounts."""
+async def list_all_users(db: AsyncSession) -> List[User]:
+    """List all accounts."""
     result = await db.execute(
         select(User)
-        .where(User.role == UserRole.STUDENT)
         .order_by(User.created_at.desc())
     )
     return list(result.scalars().all())
@@ -24,6 +23,36 @@ async def toggle_user_active(db: AsyncSession, user_id: int, is_active: bool) ->
     if user is None:
         return None
     user.is_active = is_active
+    await db.flush()
+    await db.refresh(user)
+    return user
+
+
+async def promote_to_admin(db: AsyncSession, user_id: int) -> User | None:
+    """Promote a student to an admin role."""
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if user is None:
+        return None
+    user.role = UserRole.ADMIN
+    user.is_active = True
+    await db.flush()
+    await db.refresh(user)
+    return user
+
+
+async def demote_from_admin(db: AsyncSession, user_id: int) -> User | None:
+    """Demote an admin back to a student role. Protects super admin."""
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if user is None:
+        return None
+    
+    from app.core.config import settings
+    if user.email == settings.SUPER_ADMIN_EMAIL:
+        return None  # Cannot demote super admin
+        
+    user.role = UserRole.STUDENT
     await db.flush()
     await db.refresh(user)
     return user

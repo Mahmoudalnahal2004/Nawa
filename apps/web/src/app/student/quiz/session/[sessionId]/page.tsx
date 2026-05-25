@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import api from '@/lib/api';
 import { toast } from 'sonner';
-import { ArrowRight, ArrowLeft, CheckCircle, XCircle, Loader2, Trophy, RotateCcw, Home, ChevronRight, PenTool, StickyNote, Eraser, Save, Flag, Search, Clock, Menu, Bookmark } from 'lucide-react';
+import { ArrowRight, ArrowLeft, CheckCircle, XCircle, Loader2, Trophy, RotateCcw, Home, ChevronRight, PenTool, StickyNote, Eraser, Save, Flag, Search, Clock, Menu, Bookmark, Pause, Play } from 'lucide-react';
 
 interface QuizQuestion {
   id: number;
@@ -44,7 +44,9 @@ export default function QuizSessionPage() {
   // Exam mode state
   const [examAnswers, setExamAnswers] = useState<Record<number, string>>({});
   const [flaggedQuestions, setFlaggedQuestions] = useState<Record<number, boolean>>({});
+  const [timePerQuestion, setTimePerQuestion] = useState<number>(60);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
+  const [isTimerPaused, setIsTimerPaused] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterMode, setFilterMode] = useState<'all' | 'flagged' | 'unanswered'>('all');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -77,19 +79,19 @@ export default function QuizSessionPage() {
 
   // Timer logic for exam mode
   useEffect(() => {
-    if (mode === 'exam' && timeLeft !== null && timeLeft > 0 && !quizComplete) {
+    if (mode === 'exam' && timeLeft !== null && timeLeft > 0 && !quizComplete && !isTimerPaused) {
       const timer = setInterval(() => setTimeLeft(prev => (prev && prev > 0 ? prev - 1 : 0)), 1000);
       return () => clearInterval(timer);
     } else if (mode === 'exam' && timeLeft === 0 && !quizComplete) {
       submitExam(); // auto submit when time's up
     }
-  }, [mode, timeLeft, quizComplete]);
+  }, [mode, timeLeft, quizComplete, isTimerPaused]);
 
   useEffect(() => {
     if (questions.length > 0 && mode === 'exam' && timeLeft === null) {
-      setTimeLeft(questions.length * 60); // 1 minute per question
+      setTimeLeft(questions.length * timePerQuestion); 
     }
-  }, [questions, mode]);
+  }, [questions, mode, timePerQuestion]);
 
   // Sync Practice Mode State
   useEffect(() => {
@@ -176,6 +178,7 @@ export default function QuizSessionPage() {
       setCategoryName(data.category_name);
       setQuizName(data.quiz_name || null);
       setMode(data.mode || 'practice');
+      setTimePerQuestion(data.time_per_question || 60);
       
       const restoredIndex = data.current_question_index || 0;
       setCurrentIndex(restoredIndex);
@@ -485,9 +488,18 @@ export default function QuizSessionPage() {
               <StickyNote className="w-4 h-4" /> {notesPanelOpen ? 'Close Notes' : 'Notes'}
             </button>
             {mode === 'exam' && (
-              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg font-mono text-sm font-medium shadow-inner ${timeLeft !== null && timeLeft < 300 ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' : 'bg-slate-800 text-gray-300 border border-slate-700'}`}>
-                <Clock className="w-4 h-4" />
-                {timeLeft !== null ? formatTime(timeLeft) : '00:00'}
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => setIsTimerPaused(!isTimerPaused)}
+                  className={`p-1.5 rounded-lg border transition-colors ${isTimerPaused ? 'bg-amber-500/20 border-amber-500/50 text-amber-400' : 'bg-slate-800 border-slate-700 text-gray-400 hover:text-white hover:bg-slate-700'}`}
+                  title={isTimerPaused ? "Resume Timer" : "Pause Timer"}
+                >
+                  {isTimerPaused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
+                </button>
+                <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg font-mono text-sm font-medium shadow-inner ${timeLeft !== null && timeLeft < 300 ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' : 'bg-slate-800 text-gray-300 border border-slate-700'}`}>
+                  <Clock className="w-4 h-4" />
+                  {timeLeft !== null ? formatTime(timeLeft) : '00:00'}
+                </div>
               </div>
             )}
             <button onClick={handlePause} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 text-gray-300 hover:bg-white/10 hover:text-white transition-colors border border-white/10 text-sm font-medium">

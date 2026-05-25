@@ -25,6 +25,8 @@ from app.api.v1.student import router as student_router
 from app.api.v1.universities import router as universities_router
 from app.api.v1.notes import router as notes_router
 from app.api.v1.bookmarks import router as bookmarks_router
+from app.api.v1.admin.materials import router as admin_materials_router
+from app.api.v1.materials import router as materials_router
 
 async def seed_super_admin():
     """Create the Super Admin account if it doesn't exist."""
@@ -94,7 +96,8 @@ app.include_router(student_router, prefix=API_PREFIX)
 app.include_router(universities_router, prefix=API_PREFIX)
 app.include_router(notes_router, prefix=API_PREFIX)
 app.include_router(bookmarks_router, prefix=API_PREFIX)
-
+app.include_router(admin_materials_router, prefix=API_PREFIX)
+app.include_router(materials_router, prefix=API_PREFIX)
 
 @app.get("/")
 async def root():

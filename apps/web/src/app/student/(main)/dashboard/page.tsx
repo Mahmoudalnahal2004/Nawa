@@ -12,6 +12,7 @@ interface Category {
   icon: string;
   target_year?: number | null;
   question_count: number;
+  is_active?: boolean;
   children?: Category[];
 }
 
@@ -27,9 +28,9 @@ export default function QuizGeneratorPage() {
   const [selectedBlocks, setSelectedBlocks] = useState<number[]>([]);
   const [selectedTopics, setSelectedTopics] = useState<number[]>([]);
   const [availableCounts, setAvailableCounts] = useState<Record<number, number>>({});
-  
-  const [questionCount, setQuestionCount] = useState<number>(40);
+  const [questionCount, setQuestionCount] = useState<number>(10);
   const [quizMode, setQuizMode] = useState<'practice' | 'exam'>('exam');
+  const [timePerQuestion, setTimePerQuestion] = useState<number>(60);
   const [quizName, setQuizName] = useState<string>('');
   const [generating, setGenerating] = useState(false);
 
@@ -49,10 +50,20 @@ export default function QuizGeneratorPage() {
       ]);
       
       const studyYear = userRes.data.study_year;
-      let filteredCategories = catRes.data;
+      
+      const filterActive = (cats: Category[]): Category[] => {
+        return cats
+          .filter(c => c.is_active !== false)
+          .map(c => ({
+            ...c,
+            children: c.children ? filterActive(c.children) : undefined
+          }));
+      };
+
+      let filteredCategories = filterActive(catRes.data);
       
       if (studyYear) {
-        filteredCategories = catRes.data.filter((c: Category) => !c.target_year || c.target_year === studyYear);
+        filteredCategories = filteredCategories.filter((c: Category) => !c.target_year || c.target_year === studyYear);
       }
       
       setCategories(filteredCategories);
@@ -105,7 +116,8 @@ export default function QuizGeneratorPage() {
         question_count: questionCount,
         mode: selectedMode,
         quiz_mode: quizMode,
-        quiz_name: quizName.trim() || undefined
+        quiz_name: quizName.trim() || undefined,
+        time_per_question: timePerQuestion
       });
       router.push(`/student/quiz/session/${data.session_id}`);
     } catch (e: any) {
@@ -292,13 +304,13 @@ export default function QuizGeneratorPage() {
 
         {/* Section 4: Quiz Settings */}
         {selectedTopics.length > 0 && (
-          <div className="glass-card p-6 animate-slide-up flex flex-col md:flex-row gap-6 items-center justify-between">
+          <div className="glass-card p-6 animate-slide-up flex flex-col gap-6">
              <div>
                 <h2 className="text-lg font-semibold text-white mb-2">4. Settings</h2>
-                <p className="text-sm text-gray-400">Total available questions from selected topics: <span className="font-mono text-emerald-400 font-bold">{totalAvailable}</span></p>
              </div>
-             <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
-                <div className="flex-1 min-w-[200px]">
+             
+             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                <div className="lg:col-span-4">
                   <label className="block text-xs font-medium text-gray-400 mb-1">Quiz Name (Optional)</label>
                   <input 
                     type="text" 
@@ -308,41 +320,73 @@ export default function QuizGeneratorPage() {
                     className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2.5 text-white placeholder-slate-500 focus:ring-1 focus:ring-blue-500/50 focus:border-blue-500/50"
                   />
                 </div>
-                <div className="w-24 shrink-0">
+                
+                <div className="lg:col-span-5">
                   <label className="block text-xs font-medium text-gray-400 mb-1">Count</label>
-                  <input 
-                    type="number" 
-                    value={questionCount} 
-                    onChange={e => setQuestionCount(parseInt(e.target.value) || 1)}
-                    min={1} 
-                    max={totalAvailable || 100}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:ring-1 focus:ring-blue-500/50 focus:border-blue-500/50"
-                  />
+                  <div className="flex flex-col gap-3">
+                    <div className="flex items-center gap-3">
+                      <input 
+                        type="number" 
+                        value={questionCount} 
+                        onChange={e => setQuestionCount(parseInt(e.target.value) || 1)}
+                        min={1} 
+                        max={totalAvailable || 100}
+                        className="w-24 bg-slate-900 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:ring-1 focus:ring-blue-500/50 focus:border-blue-500/50"
+                      />
+                      <span className="text-sm font-medium text-blue-400">Max {totalAvailable} Qs.</span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button onClick={() => setQuestionCount(Math.min(10, totalAvailable))} className="px-3 py-1.5 rounded-full text-xs font-medium bg-white/5 border border-white/10 text-gray-300 hover:bg-white/10 transition-colors whitespace-nowrap">Small (10 Qs.)</button>
+                      <button onClick={() => setQuestionCount(Math.min(20, totalAvailable))} className="px-3 py-1.5 rounded-full text-xs font-medium bg-white/5 border border-white/10 text-gray-300 hover:bg-white/10 transition-colors whitespace-nowrap">Medium (20 Qs.)</button>
+                      <button onClick={() => setQuestionCount(Math.min(50, totalAvailable))} className="px-3 py-1.5 rounded-full text-xs font-medium bg-white/5 border border-white/10 text-gray-300 hover:bg-white/10 transition-colors whitespace-nowrap">Large (50 Qs.)</button>
+                    </div>
+                  </div>
                 </div>
-                <div className="w-48 shrink-0">
+
+                <div className="lg:col-span-3">
                   <label className="block text-xs font-medium text-gray-400 mb-1">Mode</label>
-                  <div className="flex flex-row gap-2">
+                  <div className="flex flex-row p-1 bg-slate-900 border border-slate-700 rounded-lg h-[44px]">
                     <button
                       onClick={() => setQuizMode('practice')}
-                      className={`flex-1 py-2 px-3 rounded-xl border text-sm text-center font-medium transition-all ${
+                      className={`flex-1 rounded-md text-sm text-center font-medium transition-all ${
                         quizMode === 'practice'
-                          ? 'bg-blue-500/10 border-blue-500/50 text-blue-400 shadow-lg shadow-blue-500/10'
-                          : 'bg-slate-800 border-white/5 text-gray-500 hover:bg-slate-800/80 grayscale opacity-70'
+                          ? 'bg-blue-600 text-white shadow-sm'
+                          : 'text-gray-400 hover:text-white'
                       }`}
                     >
                       Practice
                     </button>
                     <button
                       onClick={() => setQuizMode('exam')}
-                      className={`flex-1 py-2 px-3 rounded-xl border text-sm text-center font-medium transition-all ${
+                      className={`flex-1 rounded-md text-sm text-center font-medium transition-all ${
                         quizMode === 'exam'
-                          ? 'bg-rose-500/10 border-rose-500/50 text-rose-400 shadow-lg shadow-rose-500/10'
-                          : 'bg-slate-800 border-white/5 text-gray-500 hover:bg-slate-800/80 grayscale opacity-70'
+                          ? 'bg-rose-600 text-white shadow-sm'
+                          : 'text-gray-400 hover:text-white'
                       }`}
                     >
                       Exam
                     </button>
                   </div>
+                  {quizMode === 'exam' && (
+                    <div className="mt-4 animate-fade-in">
+                      <label className="block text-xs font-medium text-gray-400 mb-1">Time per question</label>
+                      <div className="flex flex-row p-1 bg-slate-900 border border-slate-700 rounded-lg h-[44px]">
+                        {[30, 60, 90, 120].map((t) => (
+                          <button
+                            key={t}
+                            onClick={() => setTimePerQuestion(t)}
+                            className={`flex-1 rounded-md text-xs text-center font-medium transition-all ${
+                              timePerQuestion === t
+                                ? 'bg-slate-700 text-white shadow-sm border border-slate-600'
+                                : 'text-gray-400 hover:text-white'
+                            }`}
+                          >
+                            {t}s
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
              </div>
           </div>

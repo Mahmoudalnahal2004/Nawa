@@ -13,6 +13,7 @@ class QuizSession(Base):
     mode = Column(String, nullable=False)
     status = Column(String, default="in_progress")
     current_question_index = Column(Integer, default=0)
+    time_per_question = Column(Integer, default=60)
     
     questions = Column(JSON, default=list)
     answer_key = Column(JSON, default=dict)

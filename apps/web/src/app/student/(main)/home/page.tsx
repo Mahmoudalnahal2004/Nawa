@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/api';
 import { toast } from 'sonner';
-import { Loader2, Flame, Target, AlertTriangle, BookOpen, Clock, ChevronRight, LayoutDashboard, History, CheckCircle2, XCircle, Trophy } from 'lucide-react';
+import { Loader2, Flame, Target, AlertTriangle, BookOpen, Clock, ChevronRight, LayoutDashboard, History, CheckCircle2, XCircle, Trophy, Send } from 'lucide-react';
 
 export default function StudentHomePage() {
   const router = useRouter();
@@ -183,11 +183,11 @@ export default function StudentHomePage() {
           ) : (
             <div className="divide-y divide-white/5">
               {recentQuizzes.slice(0, 3).map((quiz) => {
-                const total = quiz.correct_count + quiz.incorrect_count;
-                const score = total > 0 ? Math.round((quiz.correct_count / total) * 100) : 0;
+                const total = quiz.total_questions || 0;
+                const score = Math.round(quiz.score_percentage || 0);
                 
                 return (
-                  <div key={quiz.id} className="p-5 flex items-center justify-between hover:bg-white/5 transition-colors">
+                  <div key={quiz.session_id} className="p-5 flex items-center justify-between hover:bg-white/5 transition-colors">
                     <div className="flex items-center gap-4">
                       <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center border border-white/10">
                         {score >= 80 ? (
@@ -199,13 +199,17 @@ export default function StudentHomePage() {
                         )}
                       </div>
                       <div>
-                        <h4 className="font-semibold text-white">{quiz.name || `Quiz Session #${quiz.id}`}</h4>
+                        <h4 className="font-semibold text-white">{quiz.quiz_name || quiz.category_name || `Quiz Session #${quiz.session_id.substring(0, 8)}`}</h4>
                         <div className="flex items-center gap-3 text-xs text-gray-400 mt-1">
                           <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {new Date(quiz.created_at).toLocaleDateString()}</span>
                           <span>•</span>
                           <span>{total} Questions</span>
                           <span>•</span>
                           <span className="capitalize">{quiz.mode} Mode</span>
+                          <span>•</span>
+                          <span className={`font-medium ${quiz.status === 'in_progress' ? 'text-amber-400' : 'text-emerald-400'}`}>
+                            {quiz.status === 'in_progress' ? 'In Progress' : 'Completed'}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -222,6 +226,19 @@ export default function StudentHomePage() {
           )}
         </div>
       </div>
+
+      {/* Telegram Support Button */}
+      <a 
+        href="https://t.me/+201002429528" 
+        target="_blank" 
+        rel="noopener noreferrer"
+        className="fixed bottom-6 right-6 bg-[#0088cc] hover:bg-[#0077b5] text-white p-4 rounded-full shadow-lg shadow-[#0088cc]/30 transition-all hover:scale-110 z-50 flex items-center justify-center group"
+      >
+        <Send className="w-6 h-6 shrink-0" />
+        <span className="max-w-0 overflow-hidden whitespace-nowrap group-hover:max-w-xs group-hover:pl-2 group-hover:pr-1 transition-all duration-300 ease-in-out font-medium">
+          Contact Us
+        </span>
+      </a>
     </div>
   );
 }

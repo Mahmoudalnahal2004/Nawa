@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import api from '@/lib/api';
 import { toast } from 'sonner';
 import { Plus, Search, Filter, ChevronLeft, ChevronRight, Eye, Trash2, Upload, Pencil } from 'lucide-react';
@@ -18,6 +18,7 @@ interface Question {
 
 export default function QuestionsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [questions, setQuestions] = useState<Question[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -26,6 +27,12 @@ export default function QuestionsPage() {
   const [loading, setLoading] = useState(true);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const pageSize = 15;
+
+  useEffect(() => {
+    if (searchParams.get('importCategoryId')) {
+      setIsImportModalOpen(true);
+    }
+  }, [searchParams]);
 
   useEffect(() => { loadQuestions(); }, [page, statusFilter]);
 
@@ -186,7 +193,14 @@ export default function QuestionsPage() {
 
       <BulkImportModal 
         isOpen={isImportModalOpen} 
-        onClose={() => setIsImportModalOpen(false)} 
+        categoryId={searchParams.get('importCategoryId') ? Number(searchParams.get('importCategoryId')) : undefined}
+        onClose={() => {
+          setIsImportModalOpen(false);
+          // Optional: clear the query param
+          if (searchParams.get('importCategoryId')) {
+            router.replace('/admin/questions');
+          }
+        }} 
         onSuccess={() => { setPage(1); loadQuestions(); }} 
       />
     </div>
