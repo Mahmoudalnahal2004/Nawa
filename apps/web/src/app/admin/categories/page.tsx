@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import api from '@/lib/api';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
-import { Loader2, Plus, Pencil, Trash2, FolderTree, CornerDownRight, X, LayoutTemplate, Image as ImageIcon, Upload, Eye, EyeOff, ChevronRight, ChevronDown } from 'lucide-react';
+import { Loader2, Plus, Pencil, Trash2, FolderTree, CornerDownRight, X, LayoutTemplate, Image as ImageIcon, Upload, Eye, EyeOff, ChevronRight, ChevronDown, AlertTriangle } from 'lucide-react';
 
 interface Category {
   id: number;
@@ -26,6 +26,7 @@ export default function AdminCategoriesPage() {
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+  const [categoryToDelete, setCategoryToDelete] = useState<{id: number, name: string} | null>(null);
   
   // Form State
   const [formData, setFormData] = useState({
@@ -39,6 +40,20 @@ export default function AdminCategoriesPage() {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [yearFilter, setYearFilter] = useState<string>('All');
   const [expandedCategories, setExpandedCategories] = useState<number[]>([]);
+  
+  const [parentDropdownOpen, setParentDropdownOpen] = useState(false);
+  const [expandedParentYears, setExpandedParentYears] = useState<number[]>([]);
+  const parentDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (parentDropdownRef.current && !parentDropdownRef.current.contains(event.target as Node)) {
+        setParentDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const toggleExpand = (id: number) => {
     setExpandedCategories(prev => 
@@ -83,14 +98,16 @@ export default function AdminCategoriesPage() {
     setIsModalOpen(true);
   };
 
-  const handleDelete = async (id: number, name: string) => {
-    if (!window.confirm(`Are you sure you want to delete "${name}"?`)) return;
+  const confirmDelete = async () => {
+    if (!categoryToDelete) return;
     try {
-      await api.delete(`/categories/${id}`);
+      await api.delete(`/categories/${categoryToDelete.id}`);
       toast.success('Category deleted successfully');
       fetchCategories();
     } catch (e: any) {
       toast.error(e.response?.data?.detail || 'Failed to delete category');
+    } finally {
+      setCategoryToDelete(null);
     }
   };
 
@@ -257,7 +274,7 @@ export default function AdminCategoriesPage() {
                     <button onClick={() => openEditModal(module)} className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors" title="Edit Module">
                       <Pencil className="w-4 h-4" />
                     </button>
-                    <button onClick={() => handleDelete(module.id, module.name)} className="p-2 rounded-lg bg-white/5 hover:bg-rose-500/20 text-gray-400 hover:text-rose-400 transition-colors" title="Delete Module">
+                    <button onClick={() => setCategoryToDelete({id: module.id, name: module.name})} className="p-2 rounded-lg bg-white/5 hover:bg-rose-500/20 text-gray-400 hover:text-rose-400 transition-colors" title="Delete Module">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
@@ -300,7 +317,7 @@ export default function AdminCategoriesPage() {
                           <button onClick={() => openEditModal(sub)} className="p-1.5 rounded-md bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors" title="Edit Module">
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
-                          <button onClick={() => handleDelete(sub.id, sub.name)} className="p-1.5 rounded-md bg-white/5 hover:bg-rose-500/20 text-gray-400 hover:text-rose-400 transition-colors" title="Delete Module">
+                          <button onClick={() => setCategoryToDelete({id: sub.id, name: sub.name})} className="p-1.5 rounded-md bg-white/5 hover:bg-rose-500/20 text-gray-400 hover:text-rose-400 transition-colors" title="Delete Module">
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
@@ -392,41 +409,105 @@ export default function AdminCategoriesPage() {
                     ))}
                   </select>
                 </div>
-                <div>
+                <div className="relative" ref={parentDropdownRef}>
                   <label className="block text-xs font-medium text-gray-400 mb-1">Parent Module</label>
-                  <select
-                    value={formData.parent_id}
-                    onChange={e => setFormData({ ...formData, parent_id: e.target.value })}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500 appearance-none"
+                  <div 
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white flex justify-between items-center cursor-pointer focus:outline-none focus:border-blue-500"
+                    onClick={() => setParentDropdownOpen(!parentDropdownOpen)}
                   >
-                    <option value="">-- None (Top-Level) --</option>
-                    {[1, 2, 3, 4, 5].map(year => {
-                      const yearCats = categories.filter(c => c.target_year === year);
-                      if (yearCats.length === 0) return null;
-                      return (
-                        <optgroup key={year} label={`Year ${year}`} className="bg-slate-900 text-emerald-400 font-semibold">
-                          {yearCats.sort((a, b) => a.name.localeCompare(b.name)).map(c => (
-                            <option key={c.id} value={c.id} disabled={editingCategory?.id === c.id} className="bg-slate-900 text-white">
-                              {c.name}
-                            </option>
-                          ))}
-                        </optgroup>
-                      );
-                    })}
-                    {(() => {
-                      const otherCats = categories.filter(c => !c.target_year);
-                      if (otherCats.length === 0) return null;
-                      return (
-                        <optgroup label="Global / Other" className="bg-slate-900 text-emerald-400 font-semibold">
-                          {otherCats.sort((a, b) => a.name.localeCompare(b.name)).map(c => (
-                            <option key={c.id} value={c.id} disabled={editingCategory?.id === c.id} className="bg-slate-900 text-white">
-                              {c.name}
-                            </option>
-                          ))}
-                        </optgroup>
-                      );
-                    })()}
-                  </select>
+                    <span className="truncate">
+                      {formData.parent_id === '' 
+                        ? '-- None (Top-Level) --' 
+                        : categories.find(c => c.id === Number(formData.parent_id))?.name || 'Unknown'}
+                    </span>
+                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${parentDropdownOpen ? 'rotate-180' : ''}`} />
+                  </div>
+
+                  {parentDropdownOpen && (
+                    <div className="absolute z-50 bottom-full mb-1 right-0 w-[320px] bg-slate-900 border border-slate-700 rounded-xl shadow-2xl max-h-72 overflow-y-auto">
+                      <div 
+                        className="px-4 py-2 hover:bg-white/5 cursor-pointer text-white text-sm border-b border-white/5"
+                        onClick={() => { setFormData({ ...formData, parent_id: '' }); setParentDropdownOpen(false); }}
+                      >
+                        -- None (Top-Level) --
+                      </div>
+                      
+                      {[1, 2, 3, 4, 5].map(year => {
+                        const yearCats = categories.filter(c => c.target_year === year);
+                        if (yearCats.length === 0) return null;
+                        const isExpanded = expandedParentYears.includes(year);
+                        return (
+                          <div key={year} className="border-b border-white/5 last:border-0">
+                            <div 
+                              className="px-4 py-2 bg-slate-800/30 hover:bg-slate-800/80 text-emerald-400 font-semibold text-sm flex items-center justify-between cursor-pointer transition-colors"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setExpandedParentYears(prev => prev.includes(year) ? prev.filter(y => y !== year) : [...prev, year]);
+                              }}
+                            >
+                              <span>Year {year}</span>
+                              {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                            </div>
+                            {isExpanded && (
+                              <div className="py-1 bg-slate-950/50">
+                                {yearCats.sort((a, b) => a.name.localeCompare(b.name)).map(c => (
+                                  <div
+                                    key={c.id}
+                                    className={`px-6 py-2 text-sm cursor-pointer ${editingCategory?.id === c.id ? 'opacity-50 cursor-not-allowed text-gray-500' : 'hover:bg-white/5 text-white'} ${Number(formData.parent_id) === c.id ? 'bg-emerald-500/10 text-emerald-400' : ''}`}
+                                    onClick={() => {
+                                      if (editingCategory?.id === c.id) return;
+                                      setFormData({ ...formData, parent_id: c.id });
+                                      setParentDropdownOpen(false);
+                                    }}
+                                  >
+                                    {c.name}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                      
+                      {/* Global / Other */}
+                      {(() => {
+                        const otherCats = categories.filter(c => !c.target_year);
+                        if (otherCats.length === 0) return null;
+                        const isExpanded = expandedParentYears.includes(0);
+                        return (
+                          <div key={0}>
+                            <div 
+                              className="px-4 py-2 bg-slate-800/30 hover:bg-slate-800/80 text-emerald-400 font-semibold text-sm flex items-center justify-between cursor-pointer transition-colors"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setExpandedParentYears(prev => prev.includes(0) ? prev.filter(y => y !== 0) : [...prev, 0]);
+                              }}
+                            >
+                              <span>Global / Other</span>
+                              {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                            </div>
+                            {isExpanded && (
+                              <div className="py-1 bg-slate-950/50">
+                                {otherCats.sort((a, b) => a.name.localeCompare(b.name)).map(c => (
+                                  <div
+                                    key={c.id}
+                                    className={`px-6 py-2 text-sm cursor-pointer ${editingCategory?.id === c.id ? 'opacity-50 cursor-not-allowed text-gray-500' : 'hover:bg-white/5 text-white'} ${Number(formData.parent_id) === c.id ? 'bg-emerald-500/10 text-emerald-400' : ''}`}
+                                    onClick={() => {
+                                      if (editingCategory?.id === c.id) return;
+                                      setFormData({ ...formData, parent_id: c.id });
+                                      setParentDropdownOpen(false);
+                                    }}
+                                  >
+                                    {c.name}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -440,6 +521,37 @@ export default function AdminCategoriesPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {categoryToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-slate-900 border border-white/10 rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-slide-up">
+            <div className="p-6 text-center">
+              <div className="w-16 h-16 rounded-2xl bg-rose-500/20 flex items-center justify-center mx-auto mb-4">
+                <AlertTriangle className="w-8 h-8 text-rose-500" />
+              </div>
+              <h2 className="text-xl font-bold text-white mb-2">Delete Category?</h2>
+              <p className="text-gray-400 text-sm mb-6">
+                Are you sure you want to delete <span className="text-white font-semibold">"{categoryToDelete.name}"</span>? This action cannot be undone and may affect associated questions.
+              </p>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setCategoryToDelete(null)}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-medium text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={confirmDelete}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-medium text-white bg-rose-500 hover:bg-rose-600 shadow-lg shadow-rose-500/20 transition-all"
+                >
+                  Yes, Delete
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

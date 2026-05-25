@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import api from '@/lib/api';
 import { storeAuth, isAuthenticated, getStoredUser } from '@/lib/auth';
 import { toast } from 'sonner';
@@ -77,13 +78,13 @@ export default function LoginPage() {
 
       <div className="relative z-10 w-full max-w-md mx-4 animate-fade-in">
         {/* Logo */}
-        <div className="text-center mb-8">
+        <Link href="/" className="block text-center mb-8 hover:opacity-90 transition-opacity">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-lg shadow-emerald-500/25 mb-4">
             <Stethoscope className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-3xl font-bold text-white">Nawa</h1>
           <p className="text-gray-400 mt-1">Medical Question Bank</p>
-        </div>
+        </Link>
 
         {/* Card */}
         <div className="glass-card p-8">

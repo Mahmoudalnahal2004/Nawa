@@ -59,9 +59,14 @@ export default function HomePage() {
             <button onClick={() => router.push('/login')} className="btn-primary text-base py-4 px-8">
               Start Studying <ArrowRight className="w-5 h-5 inline ml-2" />
             </button>
-            <button onClick={() => router.push('/login')} className="btn-secondary text-base py-4 px-8">
-              Admin Login
-            </button>
+            <a 
+              href="https://t.me/+201002429528" 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className="btn-secondary text-base py-4 px-8 flex items-center justify-center"
+            >
+              Contact Us
+            </a>
           </div>
 
           {/* Feature cards */}
