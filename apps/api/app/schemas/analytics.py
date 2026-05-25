@@ -19,6 +19,8 @@ class CategoryProgress(BaseModel):
     answered_count: int
     correct_count: int
     accuracy_percentage: float
+    strongest_subcategory: Optional[str] = None
+    weakest_subcategory: Optional[str] = None
 
 
 class WeakPointQuestion(BaseModel):
@@ -37,6 +39,7 @@ class RecentQuizSession(BaseModel):
     created_at: str
     quiz_name: Optional[str] = None
     status: str
+    target_year: Optional[int] = None
 
 class AnalyticsDashboardResponse(BaseModel):
     overall: OverallProgress

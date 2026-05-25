@@ -21,6 +21,8 @@ interface AnalyticsData {
     answered_count: number;
     correct_count: number;
     accuracy_percentage: number;
+    strongest_subcategory?: string;
+    weakest_subcategory?: string;
   }[];
   recent_sessions: {
     session_id: string;
@@ -28,9 +30,9 @@ interface AnalyticsData {
     mode: string;
     total_questions: number;
     score_percentage: number;
-    created_at: string;
     quiz_name?: string;
     status: string;
+    target_year?: number;
   }[];
 }
 
@@ -146,6 +148,21 @@ export default function HistoryDashboard() {
     weakest = [...remaining].reverse().slice(0, 3);
   }
 
+  // Group sessions by target_year
+  const groupedSessions = data.recent_sessions.reduce((acc, session) => {
+    const year = session.target_year ? `Year ${session.target_year}` : 'Other Sessions';
+    if (!acc[year]) acc[year] = [];
+    acc[year].push(session);
+    return acc;
+  }, {} as Record<string, typeof data.recent_sessions>);
+
+  // Sort groups: Year N first, Other Sessions last
+  const sortedYearGroups = Object.keys(groupedSessions).sort((a, b) => {
+    if (a === 'Other Sessions') return 1;
+    if (b === 'Other Sessions') return -1;
+    return b.localeCompare(a);
+  });
+
   return (
     <div className="space-y-8 animate-fade-in max-w-6xl mx-auto">
       <div className="flex items-center justify-between">
@@ -245,20 +262,16 @@ export default function HistoryDashboard() {
           ) : (
             <div className="space-y-4">
               {strongest.map(cat => (
-                <div key={cat.category_id} className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-white font-medium flex items-center gap-1.5">
-                      {cat.category_icon?.startsWith('/') ? (
-                        <img src={`http://localhost:8000${cat.category_icon}`} alt={cat.category_name} className="w-4 h-4 object-contain inline-block" />
-                      ) : (
-                        cat.category_icon
-                      )}
-                      {cat.category_name}
+                <div key={cat.category_id}>
+                  <div className="flex justify-between items-center mb-1.5">
+                    <span className="text-sm font-medium text-gray-200 flex flex-col">
+                      <span className="flex items-center gap-1.5">{cat.category_icon} {cat.category_name}</span>
+                      {cat.strongest_subcategory && <span className="text-xs text-emerald-400/80 mt-0.5 ml-6">Best Topic: {cat.strongest_subcategory}</span>}
                     </span>
-                    <span className="text-emerald-400 font-bold">{cat.accuracy_percentage}%</span>
+                    <span className="text-sm font-bold text-emerald-400">{cat.accuracy_percentage}%</span>
                   </div>
-                  <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden">
-                    <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${cat.accuracy_percentage}%` }} />
+                  <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                    <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${cat.accuracy_percentage}%` }}></div>
                   </div>
                 </div>
               ))}
@@ -276,20 +289,16 @@ export default function HistoryDashboard() {
           ) : (
             <div className="space-y-4">
               {weakest.map(cat => (
-                <div key={cat.category_id} className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-white font-medium flex items-center gap-1.5">
-                      {cat.category_icon?.startsWith('/') ? (
-                        <img src={`http://localhost:8000${cat.category_icon}`} alt={cat.category_name} className="w-4 h-4 object-contain inline-block" />
-                      ) : (
-                        cat.category_icon
-                      )}
-                      {cat.category_name}
+                <div key={cat.category_id}>
+                  <div className="flex justify-between items-center mb-1.5">
+                    <span className="text-sm font-medium text-gray-200 flex flex-col">
+                      <span className="flex items-center gap-1.5">{cat.category_icon} {cat.category_name}</span>
+                      {cat.weakest_subcategory && <span className="text-xs text-rose-400/80 mt-0.5 ml-6">Needs Work: {cat.weakest_subcategory}</span>}
                     </span>
-                    <span className="text-rose-400 font-bold">{cat.accuracy_percentage}%</span>
+                    <span className="text-sm font-bold text-rose-400">{cat.accuracy_percentage}%</span>
                   </div>
-                  <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden">
-                    <div className="h-full bg-rose-500 rounded-full" style={{ width: `${cat.accuracy_percentage}%` }} />
+                  <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                    <div className="h-full bg-rose-500 rounded-full" style={{ width: `${cat.accuracy_percentage}%` }}></div>
                   </div>
                 </div>
               ))}
@@ -298,10 +307,10 @@ export default function HistoryDashboard() {
         </div>
       </div>
 
-      {/* Recent Sessions Table */}
+      {/* Quiz Sessions History Table */}
       <div className="glass-card p-6">
         <h2 className="text-lg font-bold text-white flex items-center gap-2 mb-6">
-          <Clock className="w-5 h-5 text-blue-400" /> Recent Quiz Sessions
+          <Clock className="w-5 h-5 text-blue-400" /> Quiz Sessions History
         </h2>
         {data.recent_sessions.length === 0 ? (
           <div className="text-center py-10">
@@ -309,65 +318,74 @@ export default function HistoryDashboard() {
             <button onClick={() => router.push('/student/dashboard')} className="btn-primary">Study Now</button>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-white/10">
-                  <th className="py-3 px-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">Date</th>
-                  <th className="py-3 px-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">Module</th>
-                  <th className="py-3 px-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">Mode</th>
-                  <th className="py-3 px-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">Questions</th>
-                  <th className="py-3 px-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">Score</th>
-                  <th className="py-3 px-4"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/5">
-                {data.recent_sessions.map((session) => (
-                  <tr key={session.session_id} className="hover:bg-white/5 transition-colors">
-                    <td className="py-4 px-4 text-sm text-gray-300">
-                      {new Date(session.created_at).toLocaleDateString()} {new Date(session.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                    </td>
-                    <td className="py-4 px-4 text-sm font-medium text-white">{session.quiz_name || session.category_name}</td>
-                    <td className="py-4 px-4 text-sm">
-                      {session.mode === 'practice' ? (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-semibold border border-emerald-500/20">
-                          <BookOpen className="w-3 h-3" /> Practice
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-purple-500/10 text-purple-400 text-xs font-semibold border border-purple-500/20">
-                          <Timer className="w-3 h-3" /> Exam
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-4 px-4 text-sm text-gray-400">{session.total_questions} Qs</td>
-                    <td className="py-4 px-4 text-sm font-bold">
-                      <span className={session.score_percentage >= 70 ? 'text-emerald-400' : session.score_percentage >= 50 ? 'text-amber-400' : 'text-rose-400'}>
-                        {session.score_percentage}%
-                      </span>
-                    </td>
-                    <td className="py-4 px-4 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        {session.status === 'in_progress' ? (
-                          <button onClick={() => router.push(`/student/quiz/session/${session.session_id}`)} className="text-xs font-semibold text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 px-3 py-1.5 rounded-lg transition-colors">
-                            Resume
-                          </button>
-                        ) : (
-                          <button onClick={() => router.push(`/student/history/review/${session.session_id}`)} className="text-xs font-semibold text-blue-400 hover:text-blue-300 bg-blue-500/10 hover:bg-blue-500/20 px-3 py-1.5 rounded-lg transition-colors">
-                            Review
-                          </button>
-                        )}
-                        <button onClick={() => openRenameModal(session.session_id, session.quiz_name || session.category_name)} className="p-1.5 text-gray-400 hover:text-amber-400 bg-white/5 hover:bg-amber-500/10 rounded-lg transition-colors" title="Rename Quiz">
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button onClick={() => openDeleteModal(session.session_id)} className="p-1.5 text-gray-400 hover:text-rose-400 bg-white/5 hover:bg-rose-500/10 rounded-lg transition-colors" title="Delete Quiz">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="space-y-10">
+            {sortedYearGroups.map((year) => (
+              <div key={year} className="space-y-4">
+                <h3 className="text-md font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 inline-block px-4 py-1.5 rounded-lg shadow-sm">
+                  {year}
+                </h3>
+                <div className="overflow-x-auto bg-slate-900/50 rounded-xl border border-white/5">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-white/10 bg-slate-800/50">
+                        <th className="py-3 px-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">Date</th>
+                        <th className="py-3 px-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">Quiz Name</th>
+                        <th className="py-3 px-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">Mode</th>
+                        <th className="py-3 px-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">Questions</th>
+                        <th className="py-3 px-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">Score</th>
+                        <th className="py-3 px-4"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {groupedSessions[year].map((session) => (
+                        <tr key={session.session_id} className="hover:bg-white/5 transition-colors">
+                          <td className="py-4 px-4 text-sm text-gray-300 whitespace-nowrap">
+                            {new Date(session.created_at).toLocaleDateString()} {new Date(session.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                          </td>
+                          <td className="py-4 px-4 text-sm font-medium text-white">{session.quiz_name || session.category_name}</td>
+                          <td className="py-4 px-4 text-sm whitespace-nowrap">
+                            {session.mode === 'practice' ? (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-semibold border border-emerald-500/20">
+                                <BookOpen className="w-3 h-3" /> Practice
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-purple-500/10 text-purple-400 text-xs font-semibold border border-purple-500/20">
+                                <Timer className="w-3 h-3" /> Exam
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-4 px-4 text-sm text-gray-400 whitespace-nowrap">{session.total_questions} Qs</td>
+                          <td className="py-4 px-4 text-sm font-bold whitespace-nowrap">
+                            <span className={session.score_percentage >= 70 ? 'text-emerald-400' : session.score_percentage >= 50 ? 'text-amber-400' : 'text-rose-400'}>
+                              {session.score_percentage}%
+                            </span>
+                          </td>
+                          <td className="py-4 px-4 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              {session.status === 'in_progress' ? (
+                                <button onClick={() => router.push(`/student/quiz/session/${session.session_id}`)} className="text-xs font-semibold text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 px-3 py-1.5 rounded-lg transition-colors">
+                                  Resume
+                                </button>
+                              ) : (
+                                <button onClick={() => router.push(`/student/history/review/${session.session_id}`)} className="text-xs font-semibold text-blue-400 hover:text-blue-300 bg-blue-500/10 hover:bg-blue-500/20 px-3 py-1.5 rounded-lg transition-colors">
+                                  Review
+                                </button>
+                              )}
+                              <button onClick={() => openRenameModal(session.session_id, session.quiz_name || session.category_name)} className="p-1.5 text-gray-400 hover:text-amber-400 bg-white/5 hover:bg-amber-500/10 rounded-lg transition-colors" title="Rename Quiz">
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+                              <button onClick={() => openDeleteModal(session.session_id)} className="p-1.5 text-gray-400 hover:text-rose-400 bg-white/5 hover:bg-rose-500/10 rounded-lg transition-colors" title="Delete Quiz">
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>

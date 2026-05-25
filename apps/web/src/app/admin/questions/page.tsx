@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import api from '@/lib/api';
 import { toast } from 'sonner';
-import { Plus, Search, Filter, ChevronLeft, ChevronRight, Eye, Trash2, Upload, Pencil } from 'lucide-react';
+import { Plus, Search, Filter, ChevronLeft, ChevronRight, ChevronDown, Eye, Trash2, Upload, Pencil } from 'lucide-react';
 import { BulkImportModal } from '@/components/admin/BulkImportModal';
 
 interface Question {
@@ -24,9 +24,27 @@ export default function QuestionsPage() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [yearFilter, setYearFilter] = useState('All');
   const [loading, setLoading] = useState(true);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [expandedMainCats, setExpandedMainCats] = useState<Record<string, boolean>>({});
+  const [expandedSubCats, setExpandedSubCats] = useState<Record<string, boolean>>({});
+  const [expandedTopics, setExpandedTopics] = useState<Record<string, boolean>>({});
   const pageSize = 15;
+
+  const toggleMainCat = (mainCat: string) => {
+    setExpandedMainCats(prev => ({ ...prev, [mainCat]: !prev[mainCat] }));
+  };
+
+  const toggleSubCat = (mainCat: string, subCat: string) => {
+    const key = `${mainCat}-${subCat}`;
+    setExpandedSubCats(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const toggleTopic = (mainCat: string, subCat: string, topic: string) => {
+    const key = `${mainCat}-${subCat}-${topic}`;
+    setExpandedTopics(prev => ({ ...prev, [key]: !prev[key] }));
+  };
 
   useEffect(() => {
     if (searchParams.get('importCategoryId')) {
@@ -34,7 +52,7 @@ export default function QuestionsPage() {
     }
   }, [searchParams]);
 
-  useEffect(() => { loadQuestions(); }, [page, statusFilter]);
+  useEffect(() => { loadQuestions(); }, [page, statusFilter, yearFilter]);
 
   const loadQuestions = async () => {
     setLoading(true);
@@ -42,6 +60,7 @@ export default function QuestionsPage() {
       const params: any = { page, page_size: pageSize };
       if (statusFilter) params.status = statusFilter;
       if (search) params.search = search;
+      if (yearFilter && yearFilter !== 'All') params.target_year = yearFilter;
       const { data } = await api.get('/questions', { params });
       setQuestions(data.questions);
       setTotal(data.total);
@@ -64,6 +83,17 @@ export default function QuestionsPage() {
       toast.success('Status updated');
       loadQuestions();
     } catch { toast.error('Failed to update status'); }
+  };
+
+  const handleBulkStatus = async (questionIds: number[], status: string) => {
+    if (!questionIds.length) return;
+    try {
+      await api.patch('/questions/bulk/status', { question_ids: questionIds, status });
+      toast.success(`Questions marked as ${status}`);
+      loadQuestions();
+    } catch {
+      toast.error('Failed to update status');
+    }
   };
 
   const deleteQuestion = async (id: number) => {
@@ -91,6 +121,17 @@ export default function QuestionsPage() {
           <p className="text-gray-400 text-sm">{total} total questions</p>
         </div>
         <div className="flex gap-3">
+          <select
+            value={yearFilter}
+            onChange={(e) => { setYearFilter(e.target.value); setPage(1); }}
+            className="bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white outline-none focus:border-emerald-500 text-sm"
+          >
+            <option value="All">All Years</option>
+            <option value="Global">Global (No Year)</option>
+            {[1, 2, 3, 4, 5].map(y => (
+              <option key={y} value={y}>Year {y}</option>
+            ))}
+          </select>
           <button onClick={() => setIsImportModalOpen(true)} className="btn-secondary flex items-center gap-2 py-2.5 px-4 text-sm">
             <Upload className="w-4 h-4" /> Import
           </button>
@@ -124,8 +165,7 @@ export default function QuestionsPage() {
           <table className="data-table">
             <thead>
               <tr>
-                <th>Question</th>
-                <th>Category</th>
+                <th className="w-1/2">Question</th>
                 <th>Difficulty</th>
                 <th>Status</th>
                 <th>Actions</th>
@@ -136,40 +176,119 @@ export default function QuestionsPage() {
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i}>
                     <td><div className="skeleton h-4 w-64" /></td>
-                    <td><div className="skeleton h-4 w-24" /></td>
                     <td><div className="skeleton h-4 w-16" /></td>
                     <td><div className="skeleton h-4 w-20" /></td>
                     <td><div className="skeleton h-4 w-24" /></td>
                   </tr>
                 ))
               ) : questions.length === 0 ? (
-                <tr><td colSpan={5} className="text-center py-12 text-gray-500">No questions found</td></tr>
+                <tr><td colSpan={4} className="text-center py-12 text-gray-500">No questions found</td></tr>
               ) : (
-                questions.map((q) => (
-                  <tr key={q.id}>
-                    <td className="max-w-md">
-                      <p className="text-white line-clamp-2 text-sm" dangerouslySetInnerHTML={{ __html: q.question_text.substring(0, 120) + (q.question_text.length > 120 ? '...' : '') }} />
-                    </td>
-                    <td><span className="text-gray-300 text-sm">{q.category_name || '—'}</span></td>
-                    <td><span className={getDifficultyColor(q.difficulty)}>{q.difficulty}</span></td>
-                    <td>
-                      <button onClick={() => togglePublish(q.id)}
-                        className={q.status === 'published' ? 'badge-emerald cursor-pointer' : 'badge-amber cursor-pointer'}>
-                        {q.status}
-                      </button>
-                    </td>
-                    <td>
-                      <div className="flex items-center gap-2">
-                        <button onClick={() => router.push(`/admin/questions/${q.id}`)} className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-colors">
-                          <Pencil className="w-4 h-4" />
-                        </button>
-                        <button onClick={() => deleteQuestion(q.id)} className="p-1.5 rounded-lg hover:bg-rose-500/10 text-gray-400 hover:text-rose-400 transition-colors">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                Object.entries(
+                  questions.reduce((acc, q) => {
+                    const catParts = q.category_name ? q.category_name.split(' - ') : ['Uncategorized'];
+                    const mainCat = catParts[0].trim();
+                    const subCat = catParts.length > 1 ? catParts[1].trim() : 'General';
+                    const topic = catParts.length > 2 ? catParts.slice(2).join(' - ').trim() : 'General';
+                    
+                    if (!acc[mainCat]) acc[mainCat] = {};
+                    if (!acc[mainCat][subCat]) acc[mainCat][subCat] = {};
+                    if (!acc[mainCat][subCat][topic]) acc[mainCat][subCat][topic] = [];
+                    acc[mainCat][subCat][topic].push(q);
+                    
+                    return acc;
+                  }, {} as Record<string, Record<string, Record<string, Question[]>>>)
+                ).map(([mainCat, subCats]) => {
+                  const isMainExpanded = expandedMainCats[mainCat];
+                  return (
+                    <Fragment key={mainCat}>
+                      <tr className="bg-slate-800/50 cursor-pointer hover:bg-slate-800/70 transition-colors group/main" onClick={() => toggleMainCat(mainCat)}>
+                        <td colSpan={4} className="font-bold text-emerald-400 py-3 border-l-4 border-emerald-500 select-none">
+                          <div className="flex items-center justify-between pr-4">
+                            <div className="flex items-center gap-2">
+                              {isMainExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                              {mainCat}
+                            </div>
+                            <div className="flex items-center gap-2 opacity-0 group-hover/main:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+                              <button onClick={() => handleBulkStatus(Object.values(subCats).flatMap(t => Object.values(t).flat()).map(q => q.id), 'published')} className="text-xs px-2 py-1 rounded bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/40 transition-colors">Publish All</button>
+                              <button onClick={() => handleBulkStatus(Object.values(subCats).flatMap(t => Object.values(t).flat()).map(q => q.id), 'draft')} className="text-xs px-2 py-1 rounded bg-amber-500/20 text-amber-400 hover:bg-amber-500/40 transition-colors">Draft All</button>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                      {isMainExpanded && Object.entries(subCats).map(([subCat, topics]) => {
+                        const isSubExpanded = expandedSubCats[`${mainCat}-${subCat}`];
+                        return (
+                          <Fragment key={`${mainCat}-${subCat}`}>
+                            {subCat !== 'General' && (
+                              <tr className="bg-slate-800/20 cursor-pointer hover:bg-slate-800/40 transition-colors group/sub" onClick={() => toggleSubCat(mainCat, subCat)}>
+                                <td colSpan={4} className="font-semibold text-gray-300 py-2 pl-8 border-l-4 border-emerald-500/40 select-none">
+                                  <div className="flex items-center justify-between pr-4">
+                                    <div className="flex items-center gap-2">
+                                      {isSubExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                                      {subCat}
+                                    </div>
+                                    <div className="flex items-center gap-2 opacity-0 group-hover/sub:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+                                      <button onClick={() => handleBulkStatus(Object.values(topics).flat().map(q => q.id), 'published')} className="text-xs px-2 py-1 rounded bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/40 transition-colors">Publish</button>
+                                      <button onClick={() => handleBulkStatus(Object.values(topics).flat().map(q => q.id), 'draft')} className="text-xs px-2 py-1 rounded bg-amber-500/20 text-amber-400 hover:bg-amber-500/40 transition-colors">Draft</button>
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                            {(isSubExpanded || subCat === 'General') && Object.entries(topics).map(([topic, qs]) => {
+                              const isTopicExpanded = expandedTopics[`${mainCat}-${subCat}-${topic}`];
+                              return (
+                                <Fragment key={`${mainCat}-${subCat}-${topic}`}>
+                                  {topic !== 'General' && (
+                                    <tr className="bg-slate-800/10 cursor-pointer hover:bg-slate-800/30 transition-colors group/topic" onClick={() => toggleTopic(mainCat, subCat, topic)}>
+                                      <td colSpan={4} className="font-medium text-gray-400 py-2 pl-12 border-l-4 border-emerald-500/20 select-none">
+                                        <div className="flex items-center justify-between pr-4">
+                                          <div className="flex items-center gap-2">
+                                            {isTopicExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                                            {topic}
+                                          </div>
+                                          <div className="flex items-center gap-2 opacity-0 group-hover/topic:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+                                            <button onClick={() => handleBulkStatus(qs.map(q => q.id), 'published')} className="text-xs px-2 py-1 rounded bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/40 transition-colors">Publish</button>
+                                            <button onClick={() => handleBulkStatus(qs.map(q => q.id), 'draft')} className="text-xs px-2 py-1 rounded bg-amber-500/20 text-amber-400 hover:bg-amber-500/40 transition-colors">Draft</button>
+                                          </div>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  )}
+                                  {(isTopicExpanded || topic === 'General') && qs.map((q) => (
+                                    <tr key={q.id}>
+                                      <td className={`max-w-md ${topic !== 'General' ? 'pl-16' : subCat !== 'General' ? 'pl-12' : 'pl-8'}`}>
+                                        <p className="text-white line-clamp-2 text-sm" dangerouslySetInnerHTML={{ __html: q.question_text.substring(0, 120) + (q.question_text.length > 120 ? '...' : '') }} />
+                                      </td>
+                                      <td><span className={getDifficultyColor(q.difficulty)}>{q.difficulty}</span></td>
+                                      <td>
+                                        <button onClick={() => togglePublish(q.id)}
+                                          className={q.status === 'published' ? 'badge-emerald cursor-pointer' : 'badge-amber cursor-pointer'}>
+                                          {q.status}
+                                        </button>
+                                      </td>
+                                      <td>
+                                        <div className="flex items-center gap-2">
+                                          <button onClick={() => router.push(`/admin/questions/${q.id}`)} className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-colors">
+                                            <Pencil className="w-4 h-4" />
+                                          </button>
+                                          <button onClick={() => deleteQuestion(q.id)} className="p-1.5 rounded-lg hover:bg-rose-500/10 text-gray-400 hover:text-rose-400 transition-colors">
+                                            <Trash2 className="w-4 h-4" />
+                                          </button>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </Fragment>
+                              );
+                            })}
+                          </Fragment>
+                        );
+                      })}
+                    </Fragment>
+                  );
+                })
               )}
             </tbody>
           </table>

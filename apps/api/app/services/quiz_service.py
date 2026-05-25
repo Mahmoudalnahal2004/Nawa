@@ -231,15 +231,27 @@ async def get_quiz_results(db: AsyncSession, session_id: str, user_id: int) -> Q
 
 
 async def get_quiz_session(db: AsyncSession, session_id: str) -> dict | None:
+    from sqlalchemy import or_
     db_session = await db.get(QuizSession, session_id)
     if db_session is None:
         return None
+        
+    quiz_name = db_session.quiz_name
+    if not quiz_name or quiz_name == "Custom Generated Quiz" or quiz_name == "":
+        older_count = await db.scalar(
+            select(func.count(QuizSession.id)).where(
+                QuizSession.user_id == db_session.user_id,
+                QuizSession.created_at <= db_session.created_at,
+                or_(QuizSession.quiz_name == None, QuizSession.quiz_name == "Custom Generated Quiz", QuizSession.quiz_name == "")
+            )
+        )
+        quiz_name = f"Quiz {older_count or 1}"
         
     return {
         "user_id": db_session.user_id,
         "category_id": db_session.category_id,
         "category_name": db_session.category_name,
-        "quiz_name": db_session.quiz_name,
+        "quiz_name": quiz_name,
         "mode": db_session.mode,
         "questions": [QuizQuestion(**q) for q in db_session.questions],
         "answer_key": db_session.answer_key, # dictionary string keys are fine
@@ -254,14 +266,64 @@ async def get_quiz_session(db: AsyncSession, session_id: str) -> dict | None:
 
 
 async def get_recent_sessions(db: AsyncSession, user_id: int) -> list:
-    query = select(QuizSession).where(QuizSession.user_id == user_id).order_by(QuizSession.created_at.desc()).limit(10)
+    from app.models.category import Category
+    
+    query = select(QuizSession).where(QuizSession.user_id == user_id).order_by(QuizSession.created_at.desc())
     result = await db.execute(query)
+    
+    cat_result = await db.execute(select(Category.id, Category.parent_id, Category.target_year))
+    all_cats = cat_result.all()
+    parent_map = {r.id: r.parent_id for r in all_cats}
+    year_map = {r.id: r.target_year for r in all_cats}
+    
+    def get_target_year(cat_id):
+        curr = cat_id
+        while curr is not None:
+            if year_map.get(curr) is not None:
+                return year_map.get(curr)
+            curr = parent_map.get(curr)
+        return None
+        
+    sessions_data = result.scalars().all()
+    
+    # Pre-fetch category_ids for the first question of custom quizzes
+    custom_qids = []
+    for s in sessions_data:
+        if s.category_id == 0 and s.questions:
+            custom_qids.append(s.questions[0].get("id"))
+            
+    q_to_cat_map = {}
+    if custom_qids:
+        from app.models.question import Question
+        q_result = await db.execute(select(Question.id, Question.category_id).where(Question.id.in_(custom_qids)))
+        for row in q_result.all():
+            q_to_cat_map[row.id] = row.category_id
+
+    unnamed_count = sum(1 for s in sessions_data if not s.quiz_name or s.quiz_name == "Custom Generated Quiz" or s.quiz_name == "")
+    current_unnamed = unnamed_count
+    quiz_name_map = {}
+    for s in sessions_data:
+        if not s.quiz_name or s.quiz_name == "Custom Generated Quiz" or s.quiz_name == "":
+            quiz_name_map[s.id] = f"Quiz {current_unnamed}"
+            current_unnamed -= 1
+        else:
+            quiz_name_map[s.id] = s.quiz_name
+
     sessions = []
     
-    for s in result.scalars().all():
+    for s in sessions_data:
         total = len(s.questions)
         correct = sum(1 for a in s.answers if a["is_correct"])
         score = (correct / total * 100) if total > 0 else 0
+        
+        target_year = None
+        if s.category_id != 0:
+            target_year = get_target_year(s.category_id)
+        elif s.questions:
+            first_q_id = s.questions[0].get("id")
+            q_cat_id = q_to_cat_map.get(first_q_id)
+            if q_cat_id is not None:
+                target_year = get_target_year(q_cat_id)
         
         sessions.append(RecentQuizSession(
             session_id=s.id,
@@ -270,8 +332,9 @@ async def get_recent_sessions(db: AsyncSession, user_id: int) -> list:
             total_questions=total,
             score_percentage=round(score, 1),
             created_at=s.created_at.isoformat() if s.created_at else datetime.now(timezone.utc).isoformat(),
-            quiz_name=s.quiz_name or s.category_name,
-            status=s.status
+            quiz_name=quiz_name_map[s.id],
+            status=s.status,
+            target_year=target_year
         ))
     return sessions
 

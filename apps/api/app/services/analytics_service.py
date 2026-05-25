@@ -8,7 +8,35 @@ from app.schemas.analytics import OverallProgress, CategoryProgress, WeakPointQu
 from typing import List
 
 
-async def get_user_overall_rank(db: AsyncSession, target_user_id: int) -> int | None:
+async def get_valid_category_ids(db: AsyncSession, target_year: int | None, university: str | None) -> list[int]:
+    all_cats_query = select(Category.id, Category.parent_id, Category.target_year, Category.university)
+    all_cats = (await db.execute(all_cats_query)).all()
+    parent_map = {r.id: r.parent_id for r in all_cats}
+    def get_top_parent(cat_id):
+        curr = cat_id
+        while curr is not None and parent_map.get(curr) is not None:
+            curr = parent_map[curr]
+        return curr
+        
+    top_categories = {r.id for r in all_cats if r.parent_id is None and (target_year is None or r.target_year == target_year) and (university is None or r.university is None or r.university == university)}
+    
+    valid_ids = [r.id for r in all_cats if get_top_parent(r.id) in top_categories]
+    return valid_ids
+
+async def get_user_overall_rank(db: AsyncSession, target_user_id: int, target_year: int | None = None, university: str | None = None) -> int | None:
+    all_cats_query = select(Category.id, Category.parent_id, Category.target_year, Category.university)
+    all_cats = (await db.execute(all_cats_query)).all()
+    parent_map = {r.id: r.parent_id for r in all_cats}
+    def get_top_parent(cat_id):
+        curr = cat_id
+        while curr is not None and parent_map.get(curr) is not None:
+            curr = parent_map[curr]
+        return curr
+        
+    top_categories = {r.id for r in all_cats if r.parent_id is None and (target_year is None or r.target_year == target_year) and (university is None or r.university is None or r.university == university)}
+
+    q_cat_map = {q.id: q.category_id for q in (await db.execute(select(Question.id, Question.category_id))).all()}
+
     user_stats = {}
     sessions_result = await db.execute(select(QuizSession))
     for s in sessions_result.scalars().all():
@@ -16,9 +44,14 @@ async def get_user_overall_rank(db: AsyncSession, target_user_id: int) -> int | 
         if uid not in user_stats:
             user_stats[uid] = {"total": 0, "correct": 0}
         for ans in s.answers:
-            user_stats[uid]["total"] += 1
-            if ans.get("is_correct"):
-                user_stats[uid]["correct"] += 1
+            qid = ans.get("question_id")
+            cat_id = q_cat_map.get(qid)
+            if cat_id is not None:
+                top_parent_id = get_top_parent(cat_id)
+                if top_parent_id in top_categories:
+                    user_stats[uid]["total"] += 1
+                    if ans.get("is_correct"):
+                        user_stats[uid]["correct"] += 1
                 
     if target_user_id not in user_stats or user_stats[target_user_id]["total"] == 0:
         return None
@@ -35,23 +68,16 @@ async def get_user_overall_rank(db: AsyncSession, target_user_id: int) -> int | 
             
     return None
 
-async def get_overall_progress(db: AsyncSession, user_id: int) -> OverallProgress:
-    query = select(QuizSession).where(QuizSession.user_id == user_id)
-    result = await db.execute(query)
+async def get_overall_progress(db: AsyncSession, user_id: int, target_year: int | None = None, university: str | None = None) -> OverallProgress:
+    categories = await get_category_progress(db, user_id, target_year, university)
     
-    total = 0
-    correct = 0
-    for s in result.scalars().all():
-        for ans in s.answers:
-            total += 1
-            if ans.get("is_correct"):
-                correct += 1
-
-    # Calculate weak points count which now represents unique existing incorrect questions
-    weak_points = await get_weak_points(db, user_id)
+    total = sum(c.answered_count for c in categories)
+    correct = sum(c.correct_count for c in categories)
+    
+    weak_points = await get_weak_points(db, user_id, target_year, university)
     
     # Calculate user rank
-    rank = await get_user_overall_rank(db, user_id)
+    rank = await get_user_overall_rank(db, user_id, target_year, university)
 
     return OverallProgress(
         total_answered=total, correct_count=correct, incorrect_count=len(weak_points),
@@ -62,58 +88,105 @@ async def get_overall_progress(db: AsyncSession, user_id: int) -> OverallProgres
 
 
 async def get_category_progress(db: AsyncSession, user_id: int, target_year: int | None = None, university: str | None = None) -> List[CategoryProgress]:
-    # Get all categories with published question counts, filtered by target year and university if set
-    cat_query = select(
-        Category.id, Category.name, Category.icon,
-        func.count(Question.id).label("total_questions"),
-    ).outerjoin(Question, and_(Question.category_id == Category.id, Question.status == QuestionStatus.PUBLISHED)
-    ).group_by(Category.id, Category.name, Category.icon)
-
     from sqlalchemy import or_
 
-    if target_year is not None:
-        cat_query = cat_query.where(Category.target_year == target_year)
-        
-    if university is not None:
-        cat_query = cat_query.where(
-            or_(Category.university == None, Category.university == university)
-        )
-
-    cat_result = await db.execute(cat_query)
-    categories = cat_result.all()
-
-    # Load all question category_ids into a dict for fast lookup
-    questions_result = await db.execute(select(Question.id, Question.category_id))
-    q_cat_map = {r.id: r.category_id for r in questions_result.all()}
-
-    progress_map = {}
+    # 1. Fetch all categories to build the parent map and find top-level categories
+    all_cats_query = select(Category.id, Category.name, Category.icon, Category.parent_id, Category.target_year, Category.university)
+    all_cats_result = await db.execute(all_cats_query)
+    all_cats = all_cats_result.all()
     
+    parent_map = {r.id: r.parent_id for r in all_cats}
+    
+    def get_top_parent(cat_id):
+        curr = cat_id
+        while curr is not None and parent_map.get(curr) is not None:
+            curr = parent_map[curr]
+        return curr
+
+    top_categories = {}
+    for r in all_cats:
+        if r.parent_id is None:
+            if target_year is not None and r.target_year != target_year:
+                continue
+            if university is not None and r.university is not None and r.university != university:
+                continue
+            top_categories[r.id] = {
+                "name": r.name,
+                "icon": r.icon or "📚",
+                "total_questions": 0,
+                "answered": 0,
+                "correct": 0,
+                "sub_stats": {}
+            }
+
+    # 2. Load all questions to map id -> category_id and count total published
+    questions_result = await db.execute(select(Question.id, Question.category_id, Question.status))
+    q_cat_map = {}
+    for q in questions_result.all():
+        q_cat_map[q.id] = q.category_id
+        if q.status == QuestionStatus.PUBLISHED:
+            top_parent_id = get_top_parent(q.category_id)
+            if top_parent_id in top_categories:
+                top_categories[top_parent_id]["total_questions"] += 1
+
+    # 3. Process quiz sessions to get answered/correct counts
     sessions_result = await db.execute(select(QuizSession).where(QuizSession.user_id == user_id))
     for s in sessions_result.scalars().all():
         for ans in s.answers:
             qid = ans.get("question_id")
             cat_id = q_cat_map.get(qid)
             if cat_id is not None:
-                if cat_id not in progress_map:
-                    progress_map[cat_id] = {"answered": 0, "correct": 0}
-                progress_map[cat_id]["answered"] += 1
-                if ans.get("is_correct"):
-                    progress_map[cat_id]["correct"] += 1
+                top_parent_id = get_top_parent(cat_id)
+                if top_parent_id in top_categories:
+                    top_categories[top_parent_id]["answered"] += 1
+                    if ans.get("is_correct"):
+                        top_categories[top_parent_id]["correct"] += 1
+                        
+                    if cat_id != top_parent_id:
+                        if cat_id not in top_categories[top_parent_id]["sub_stats"]:
+                            top_categories[top_parent_id]["sub_stats"][cat_id] = {"answered": 0, "correct": 0}
+                        top_categories[top_parent_id]["sub_stats"][cat_id]["answered"] += 1
+                        if ans.get("is_correct"):
+                            top_categories[top_parent_id]["sub_stats"][cat_id]["correct"] += 1
+
+    cat_names = {r.id: r.name for r in all_cats}
 
     result = []
-    for cat in categories:
-        prog = progress_map.get(cat.id, {"answered": 0, "correct": 0})
-        answered = prog["answered"]
-        correct = prog["correct"]
+    for cid, data in top_categories.items():
+        answered = data["answered"]
+        correct = data["correct"]
+        
+        strongest_sub = None
+        weakest_sub = None
+        
+        if data["sub_stats"]:
+            valid_subs = [
+                (cat_id, stats["correct"] / stats["answered"] * 100) 
+                for cat_id, stats in data["sub_stats"].items() 
+                if stats["answered"] > 0
+            ]
+            if valid_subs:
+                valid_subs.sort(key=lambda x: x[1])
+                weakest_cat_id = valid_subs[0][0]
+                strongest_cat_id = valid_subs[-1][0]
+                weakest_sub = cat_names.get(weakest_cat_id)
+                strongest_sub = cat_names.get(strongest_cat_id)
+
         result.append(CategoryProgress(
-            category_id=cat.id, category_name=cat.name, category_icon=cat.icon or "📚",
-            total_questions=cat.total_questions or 0, answered_count=answered, correct_count=correct,
+            category_id=cid,
+            category_name=data["name"],
+            category_icon=data["icon"],
+            total_questions=data["total_questions"],
+            answered_count=answered,
+            correct_count=correct,
             accuracy_percentage=round((correct / answered * 100) if answered > 0 else 0, 1),
+            strongest_subcategory=strongest_sub,
+            weakest_subcategory=weakest_sub
         ))
     return result
 
 
-async def get_weak_points(db: AsyncSession, user_id: int) -> List[WeakPointQuestion]:
+async def get_weak_points(db: AsyncSession, user_id: int, target_year: int | None = None, university: str | None = None) -> List[WeakPointQuestion]:
     wrong_counts = {}
     last_attempt = {}
     
@@ -132,24 +205,38 @@ async def get_weak_points(db: AsyncSession, user_id: int) -> List[WeakPointQuest
         return []
         
     result = await db.execute(
-        select(Question.id, Question.question_text, Category.name.label("category_name"))
+        select(Question.id, Question.question_text, Question.category_id, Category.name.label("category_name"))
         .outerjoin(Category, Question.category_id == Category.id)
         .where(Question.id.in_(weak_qids))
     )
     
     questions_map = {r.id: r for r in result.all()}
     
+    # Filter by target_year and university
+    all_cats_query = select(Category.id, Category.parent_id, Category.target_year, Category.university)
+    all_cats = (await db.execute(all_cats_query)).all()
+    parent_map = {r.id: r.parent_id for r in all_cats}
+    def get_top_parent(cat_id):
+        curr = cat_id
+        while curr is not None and parent_map.get(curr) is not None:
+            curr = parent_map[curr]
+        return curr
+        
+    top_categories = {r.id for r in all_cats if r.parent_id is None and (target_year is None or r.target_year == target_year) and (university is None or r.university is None or r.university == university)}
+    
     weak_points = []
     for qid in weak_qids:
         r = questions_map.get(qid)
         if r:
-            weak_points.append(WeakPointQuestion(
-                question_id=qid, 
-                question_text=r.question_text[:100] + "..." if len(r.question_text) > 100 else r.question_text,
-                category_name=r.category_name or "Uncategorized", 
-                times_incorrect=wrong_counts[qid],
-                last_attempt=str(last_attempt[qid])
-            ))
+            top_parent_id = get_top_parent(r.category_id)
+            if top_parent_id in top_categories:
+                weak_points.append(WeakPointQuestion(
+                    question_id=qid, 
+                    question_text=r.question_text[:100] + "..." if len(r.question_text) > 100 else r.question_text,
+                    category_name=r.category_name or "Uncategorized", 
+                    times_incorrect=wrong_counts[qid],
+                    last_attempt=str(last_attempt[qid])
+                ))
             
     weak_points.sort(key=lambda x: x.times_incorrect, reverse=True)
     return weak_points

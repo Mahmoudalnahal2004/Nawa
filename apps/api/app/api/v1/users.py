@@ -50,8 +50,20 @@ async def demote_from_admin(user_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/me", response_model=ProfileResponse)
-async def get_my_profile(user: User = Depends(get_current_active_user)):
+async def get_my_profile(user: User = Depends(get_current_active_user), db: AsyncSession = Depends(get_db)):
     """Return the current authenticated user's profile."""
+    from datetime import date, timedelta
+    today = date.today()
+    if user.last_login_date != today:
+        if user.last_login_date is None:
+            user.current_streak = 1
+        elif user.last_login_date == today - timedelta(days=1):
+            user.current_streak += 1
+        else:
+            user.current_streak = 1
+        user.last_login_date = today
+        await db.commit()
+        await db.refresh(user)
     return ProfileResponse.model_validate(user)
 
 

@@ -28,6 +28,9 @@ export default function EditQuestionPage({ params }: { params: { id: string } })
     status: 'draft',
     image_url: '',
   });
+  const [isCatOpen, setIsCatOpen] = useState(false);
+  const [expandedYears, setExpandedYears] = useState<Record<number, boolean>>({});
+  const [expandedMainCats, setExpandedMainCats] = useState<Record<number, boolean>>({});
 
   useEffect(() => {
     // Fetch categories and question data in parallel
@@ -210,9 +213,6 @@ export default function EditQuestionPage({ params }: { params: { id: string } })
               <div className="relative">
                 <label className="block text-xs font-medium text-gray-400 mb-1.5">Category *</label>
                 {(() => {
-                  const [isCatOpen, setIsCatOpen] = useState(false);
-                  const [expandedYears, setExpandedYears] = useState<Record<number, boolean>>({});
-                  const [expandedMainCats, setExpandedMainCats] = useState<Record<number, boolean>>({});
                   const selectedCatName = categories.find(c => c.id.toString() === form.category_id)?.name || 'Select category';
 
                   const renderCategoryTree = (catsToRender: Category[]) => {

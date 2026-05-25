@@ -25,6 +25,7 @@ export default function AdminMaterialsPage() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [deleteModalState, setDeleteModalState] = useState<{isOpen: boolean; id: number | null}>({isOpen: false, id: null});
 
   const [selectedCategory, setSelectedCategory] = useState('');
   const [title, setTitle] = useState('');
@@ -88,8 +89,14 @@ export default function AdminMaterialsPage() {
     }
   };
 
-  const handleDelete = async (id: number) => {
-    if (!confirm('Are you sure you want to delete this study material?')) return;
+  const confirmDelete = (id: number) => {
+    setDeleteModalState({isOpen: true, id});
+  };
+
+  const handleDelete = async () => {
+    if (deleteModalState.id === null) return;
+    const id = deleteModalState.id;
+    setDeleteModalState({isOpen: false, id: null});
     
     setDeletingId(id);
     try {
@@ -252,7 +259,7 @@ export default function AdminMaterialsPage() {
                       </td>
                       <td className="py-4 px-6 text-right">
                         <button
-                          onClick={() => handleDelete(mat.id)}
+                          onClick={() => confirmDelete(mat.id)}
                           disabled={deletingId === mat.id}
                           className="p-2 text-gray-400 hover:text-rose-400 bg-white/5 hover:bg-rose-500/10 rounded-lg transition-colors"
                           title="Delete Material"
@@ -268,6 +275,36 @@ export default function AdminMaterialsPage() {
           </div>
         )}
       </div>
+      {/* Delete Confirmation Modal */}
+      {deleteModalState.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-slate-900 border border-white/10 rounded-2xl p-6 w-full max-w-md shadow-2xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-3 bg-rose-500/10 text-rose-400 rounded-xl">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <h3 className="text-lg font-semibold text-white">Delete Study Material</h3>
+            </div>
+            <p className="text-gray-400 mb-6">
+              Are you sure you want to delete this study material? This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setDeleteModalState({ isOpen: false, id: null })}
+                className="px-4 py-2 text-sm font-medium text-gray-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                className="px-4 py-2 text-sm font-medium text-white bg-rose-500 hover:bg-rose-600 rounded-lg transition-colors"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

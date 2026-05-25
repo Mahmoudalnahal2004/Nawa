@@ -1,6 +1,6 @@
 from typing import List, Optional, Tuple
 
-from sqlalchemy import select, func, delete, or_
+from sqlalchemy import select, func, delete, or_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.question import Question, QuestionStatus, Difficulty
@@ -38,19 +38,24 @@ async def get_questions_paginated(
     category_id: Optional[int] = None,
     search: Optional[str] = None,
     difficulty: Optional[str] = None,
+    target_year: Optional[str] = None,
 ) -> Tuple[List[dict], int]:
     """Get paginated questions with optional filters."""
     from sqlalchemy.orm import aliased
     ParentCategory = aliased(Category)
+    GrandParentCategory = aliased(Category)
 
     query = select(
         Question, 
         Category.name.label("category_name"),
-        ParentCategory.name.label("parent_name")
+        ParentCategory.name.label("parent_name"),
+        GrandParentCategory.name.label("grandparent_name")
     ).outerjoin(
         Category, Question.category_id == Category.id
     ).outerjoin(
         ParentCategory, Category.parent_id == ParentCategory.id
+    ).outerjoin(
+        GrandParentCategory, ParentCategory.parent_id == GrandParentCategory.id
     )
 
     # Apply filters
@@ -60,6 +65,10 @@ async def get_questions_paginated(
         query = query.where(Question.category_id == category_id)
     if difficulty:
         query = query.where(Question.difficulty == Difficulty(difficulty))
+    if target_year == "Global":
+        query = query.where(Category.target_year.is_(None))
+    elif target_year and target_year != "All":
+        query = query.where(Category.target_year == int(target_year))
     if search:
         query = query.where(
             or_(
@@ -76,7 +85,16 @@ async def get_questions_paginated(
     total = (await db.execute(count_query)).scalar_one()
 
     # Paginate
-    query = query.order_by(Question.created_at.desc())
+    sort_col_1 = func.coalesce(GrandParentCategory.name, ParentCategory.name, Category.name)
+    sort_col_2 = func.coalesce(ParentCategory.name, Category.name)
+    sort_col_3 = Category.name
+
+    query = query.order_by(
+        sort_col_1.asc(),
+        sort_col_2.asc(),
+        sort_col_3.asc(),
+        Question.created_at.desc()
+    )
     query = query.offset((page - 1) * page_size).limit(page_size)
 
     result = await db.execute(query)
@@ -85,8 +103,10 @@ async def get_questions_paginated(
         q = row[0]
         cat_name = row[1]
         parent_name = row[2]
+        grandparent_name = row[3]
         
-        full_cat_name = f"{parent_name} - {cat_name}" if parent_name else cat_name
+        parts = [name for name in [grandparent_name, parent_name, cat_name] if name]
+        full_cat_name = " - ".join(parts) if parts else "Uncategorized"
         
         questions.append({
             "id": q.id,
@@ -172,3 +192,15 @@ async def get_question_stats(db: AsyncSession) -> dict:
     )).scalar_one()
 
     return {"total": total, "published": published, "draft": draft}
+
+async def bulk_update_status(db: AsyncSession, question_ids: list[int], status: str) -> bool:
+    """Bulk update the status of multiple questions."""
+    if not question_ids:
+        return True
+    await db.execute(
+        update(Question)
+        .where(Question.id.in_(question_ids))
+        .values(status=QuestionStatus(status))
+    )
+    await db.flush()
+    return True

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, Fragment } from 'react';
 import api from '@/lib/api';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
@@ -27,6 +27,7 @@ export default function AdminCategoriesPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [categoryToDelete, setCategoryToDelete] = useState<{id: number, name: string} | null>(null);
+  const [deletePassword, setDeletePassword] = useState('');
   
   // Form State
   const [formData, setFormData] = useState({
@@ -43,6 +44,7 @@ export default function AdminCategoriesPage() {
   
   const [parentDropdownOpen, setParentDropdownOpen] = useState(false);
   const [expandedParentYears, setExpandedParentYears] = useState<number[]>([]);
+  const [expandedParentModules, setExpandedParentModules] = useState<number[]>([]);
   const parentDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -101,13 +103,16 @@ export default function AdminCategoriesPage() {
   const confirmDelete = async () => {
     if (!categoryToDelete) return;
     try {
-      await api.delete(`/categories/${categoryToDelete.id}`);
+      await api.delete(`/categories/${categoryToDelete.id}`, {
+        params: { password: deletePassword || undefined }
+      });
       toast.success('Category deleted successfully');
       fetchCategories();
     } catch (e: any) {
       toast.error(e.response?.data?.detail || 'Failed to delete category');
     } finally {
       setCategoryToDelete(null);
+      setDeletePassword('');
     }
   };
 
@@ -284,11 +289,17 @@ export default function AdminCategoriesPage() {
                 {module.children && module.children.length > 0 && expandedCategories.includes(module.id) && (
                   <div className="mt-3 pl-14 space-y-2">
                     {module.children.map(sub => (
-                      <div key={sub.id} className="flex items-center justify-between p-3 rounded-lg bg-slate-900/50 border border-white/5 group/sub">
-                        <div className="flex items-center gap-3">
+                      <Fragment key={sub.id}>
+                        <div className="flex items-center justify-between p-3 rounded-lg bg-slate-900/50 border border-white/5 group/sub">
+                          <div className="flex items-center gap-3">
                           <CornerDownRight className={`w-4 h-4 ${!sub.is_active ? 'text-gray-700' : 'text-gray-600'}`} />
                           <div>
                             <p className={`text-sm font-medium flex items-center gap-2 ${!sub.is_active ? 'text-gray-500' : 'text-gray-200'}`}>
+                              {sub.children && sub.children.length > 0 && (
+                                <button onClick={() => toggleExpand(sub.id)} className="p-0.5 hover:bg-white/10 rounded-md transition-colors text-gray-400">
+                                  {expandedCategories.includes(sub.id) ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                                </button>
+                              )}
                               <span className={!sub.is_active ? 'line-through' : ''}>{sub.name}</span>
                               {sub.target_year && (
                                 <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
@@ -301,7 +312,7 @@ export default function AdminCategoriesPage() {
                                 </span>
                               )}
                             </p>
-                            <p className="text-xs text-gray-500">{sub.description || 'No description'} • {sub.question_count || 0} Questions</p>
+                            <p className="text-xs text-gray-500">{sub.description || 'No description'} • {(sub.question_count || 0) + (sub.children?.reduce((sum, child) => sum + (child.question_count || 0), 0) || 0)} Questions</p>
                           </div>
                         </div>
                         <div className="flex items-center gap-2 opacity-0 group-hover/sub:opacity-100 transition-opacity">
@@ -322,6 +333,45 @@ export default function AdminCategoriesPage() {
                           </button>
                         </div>
                       </div>
+                      
+                      {/* Topics (3rd Level) */}
+                      {sub.children && sub.children.length > 0 && expandedCategories.includes(sub.id) && (
+                        <div className="mt-2 pl-12 space-y-2">
+                          {sub.children.map(topic => (
+                            <div key={topic.id} className="flex items-center justify-between p-2 rounded-lg bg-slate-900/30 border border-white/5 group/topic">
+                              <div className="flex items-center gap-3">
+                                <CornerDownRight className={`w-4 h-4 ${!topic.is_active ? 'text-gray-700' : 'text-gray-600'}`} />
+                                <div>
+                                  <p className={`text-sm flex items-center gap-2 ${!topic.is_active ? 'text-gray-500' : 'text-gray-300'}`}>
+                                    <span className={!topic.is_active ? 'line-through' : ''}>{topic.name}</span>
+                                    {topic.target_year && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Year {topic.target_year}</span>}
+                                    {!topic.is_active && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-400 border border-rose-500/20">Hidden</span>}
+                                  </p>
+                                  <p className="text-xs text-gray-500">{topic.description || 'No description'} • {topic.question_count || 0} Questions</p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2 opacity-0 group-hover/topic:opacity-100 transition-opacity">
+                                <button onClick={() => handleToggleActive(topic)} className={`p-1.5 rounded-md transition-colors ${topic.is_active ? 'bg-white/5 hover:bg-amber-500/20 text-gray-400 hover:text-amber-400' : 'bg-rose-500/10 text-rose-400 hover:bg-emerald-500/20 hover:text-emerald-400'}`}>
+                                  {topic.is_active ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                                </button>
+                                <button onClick={() => router.push(`/admin/questions/new?categoryId=${topic.id}`)} className="p-1.5 rounded-md bg-white/5 hover:bg-emerald-500/20 text-gray-400 hover:text-emerald-400 transition-colors">
+                                  <Plus className="w-3.5 h-3.5" />
+                                </button>
+                                <button onClick={() => router.push(`/admin/questions?importCategoryId=${topic.id}`)} className="p-1.5 rounded-md bg-white/5 hover:bg-emerald-500/20 text-gray-400 hover:text-emerald-400 transition-colors">
+                                  <Upload className="w-3.5 h-3.5" />
+                                </button>
+                                <button onClick={() => openEditModal(topic)} className="p-1.5 rounded-md bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors">
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </button>
+                                <button onClick={() => setCategoryToDelete({id: topic.id, name: topic.name})} className="p-1.5 rounded-md bg-white/5 hover:bg-rose-500/20 text-gray-400 hover:text-rose-400 transition-colors">
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </Fragment>
                     ))}
                   </div>
                 )}
@@ -418,7 +468,16 @@ export default function AdminCategoriesPage() {
                     <span className="truncate">
                       {formData.parent_id === '' 
                         ? '-- None (Top-Level) --' 
-                        : categories.find(c => c.id === Number(formData.parent_id))?.name || 'Unknown'}
+                        : (() => {
+                            const pid = Number(formData.parent_id);
+                            const top = categories.find(c => c.id === pid);
+                            if (top) return top.name;
+                            for (const c of categories) {
+                              const sub = c.children?.find(ch => ch.id === pid);
+                              if (sub) return `${c.name} > ${sub.name}`;
+                            }
+                            return 'Unknown';
+                          })()}
                     </span>
                     <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${parentDropdownOpen ? 'rotate-180' : ''}`} />
                   </div>
@@ -450,19 +509,55 @@ export default function AdminCategoriesPage() {
                             </div>
                             {isExpanded && (
                               <div className="py-1 bg-slate-950/50">
-                                {yearCats.sort((a, b) => a.name.localeCompare(b.name)).map(c => (
-                                  <div
-                                    key={c.id}
-                                    className={`px-6 py-2 text-sm cursor-pointer ${editingCategory?.id === c.id ? 'opacity-50 cursor-not-allowed text-gray-500' : 'hover:bg-white/5 text-white'} ${Number(formData.parent_id) === c.id ? 'bg-emerald-500/10 text-emerald-400' : ''}`}
-                                    onClick={() => {
-                                      if (editingCategory?.id === c.id) return;
-                                      setFormData({ ...formData, parent_id: c.id });
-                                      setParentDropdownOpen(false);
-                                    }}
-                                  >
-                                    {c.name}
-                                  </div>
-                                ))}
+                                {yearCats.sort((a, b) => a.name.localeCompare(b.name)).map(c => {
+                                  const hasChildren = c.children && c.children.length > 0;
+                                  const isModuleExpanded = expandedParentModules.includes(c.id);
+                                  return (
+                                    <div key={c.id}>
+                                      <div
+                                        className={`px-6 py-2 text-sm flex items-center justify-between cursor-pointer ${editingCategory?.id === c.id ? 'opacity-50 cursor-not-allowed text-gray-500' : 'hover:bg-white/5 text-white'} ${Number(formData.parent_id) === c.id ? 'bg-emerald-500/10 text-emerald-400' : ''}`}
+                                        onClick={() => {
+                                          if (editingCategory?.id === c.id) return;
+                                          setFormData({ ...formData, parent_id: c.id });
+                                          setParentDropdownOpen(false);
+                                        }}
+                                      >
+                                        <span>{c.name}</span>
+                                        {hasChildren && (
+                                          <button
+                                            type="button"
+                                            className="p-1 hover:bg-white/10 rounded"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setExpandedParentModules(prev => 
+                                                prev.includes(c.id) ? prev.filter(id => id !== c.id) : [...prev, c.id]
+                                              );
+                                            }}
+                                          >
+                                            {isModuleExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                                          </button>
+                                        )}
+                                      </div>
+                                      {isModuleExpanded && hasChildren && (
+                                        <div className="bg-slate-950/30">
+                                          {c.children!.sort((a, b) => a.name.localeCompare(b.name)).map(sub => (
+                                            <div
+                                              key={sub.id}
+                                              className={`pl-10 pr-6 py-2 text-sm cursor-pointer ${editingCategory?.id === sub.id ? 'opacity-50 cursor-not-allowed text-gray-500' : 'hover:bg-white/5 text-gray-300'} ${Number(formData.parent_id) === sub.id ? 'bg-emerald-500/10 text-emerald-400' : ''}`}
+                                              onClick={() => {
+                                                if (editingCategory?.id === sub.id) return;
+                                                setFormData({ ...formData, parent_id: sub.id });
+                                                setParentDropdownOpen(false);
+                                              }}
+                                            >
+                                              {sub.name}
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
                               </div>
                             )}
                           </div>
@@ -488,19 +583,55 @@ export default function AdminCategoriesPage() {
                             </div>
                             {isExpanded && (
                               <div className="py-1 bg-slate-950/50">
-                                {otherCats.sort((a, b) => a.name.localeCompare(b.name)).map(c => (
-                                  <div
-                                    key={c.id}
-                                    className={`px-6 py-2 text-sm cursor-pointer ${editingCategory?.id === c.id ? 'opacity-50 cursor-not-allowed text-gray-500' : 'hover:bg-white/5 text-white'} ${Number(formData.parent_id) === c.id ? 'bg-emerald-500/10 text-emerald-400' : ''}`}
-                                    onClick={() => {
-                                      if (editingCategory?.id === c.id) return;
-                                      setFormData({ ...formData, parent_id: c.id });
-                                      setParentDropdownOpen(false);
-                                    }}
-                                  >
-                                    {c.name}
-                                  </div>
-                                ))}
+                                {otherCats.sort((a, b) => a.name.localeCompare(b.name)).map(c => {
+                                  const hasChildren = c.children && c.children.length > 0;
+                                  const isModuleExpanded = expandedParentModules.includes(c.id);
+                                  return (
+                                    <div key={c.id}>
+                                      <div
+                                        className={`px-6 py-2 text-sm flex items-center justify-between cursor-pointer ${editingCategory?.id === c.id ? 'opacity-50 cursor-not-allowed text-gray-500' : 'hover:bg-white/5 text-white'} ${Number(formData.parent_id) === c.id ? 'bg-emerald-500/10 text-emerald-400' : ''}`}
+                                        onClick={() => {
+                                          if (editingCategory?.id === c.id) return;
+                                          setFormData({ ...formData, parent_id: c.id });
+                                          setParentDropdownOpen(false);
+                                        }}
+                                      >
+                                        <span>{c.name}</span>
+                                        {hasChildren && (
+                                          <button
+                                            type="button"
+                                            className="p-1 hover:bg-white/10 rounded"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setExpandedParentModules(prev => 
+                                                prev.includes(c.id) ? prev.filter(id => id !== c.id) : [...prev, c.id]
+                                              );
+                                            }}
+                                          >
+                                            {isModuleExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                                          </button>
+                                        )}
+                                      </div>
+                                      {isModuleExpanded && hasChildren && (
+                                        <div className="bg-slate-950/30">
+                                          {c.children!.sort((a, b) => a.name.localeCompare(b.name)).map(sub => (
+                                            <div
+                                              key={sub.id}
+                                              className={`pl-10 pr-6 py-2 text-sm cursor-pointer ${editingCategory?.id === sub.id ? 'opacity-50 cursor-not-allowed text-gray-500' : 'hover:bg-white/5 text-gray-300'} ${Number(formData.parent_id) === sub.id ? 'bg-emerald-500/10 text-emerald-400' : ''}`}
+                                              onClick={() => {
+                                                if (editingCategory?.id === sub.id) return;
+                                                setFormData({ ...formData, parent_id: sub.id });
+                                                setParentDropdownOpen(false);
+                                              }}
+                                            >
+                                              {sub.name}
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
                               </div>
                             )}
                           </div>
@@ -537,9 +668,22 @@ export default function AdminCategoriesPage() {
               <p className="text-gray-400 text-sm mb-6">
                 Are you sure you want to delete <span className="text-white font-semibold">"{categoryToDelete.name}"</span>? This action cannot be undone and may affect associated questions.
               </p>
+              <div className="mb-6 text-left">
+                <label className="block text-xs font-medium text-gray-400 mb-1">Confirmation Password (if has questions)</label>
+                <input
+                  type="password"
+                  value={deletePassword}
+                  onChange={e => setDeletePassword(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-rose-500"
+                  placeholder="Enter '0000' to force delete"
+                />
+              </div>
               <div className="flex gap-3">
                 <button 
-                  onClick={() => setCategoryToDelete(null)}
+                  onClick={() => {
+                    setCategoryToDelete(null);
+                    setDeletePassword('');
+                  }}
                   className="flex-1 py-2.5 rounded-xl text-sm font-medium text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 transition-colors"
                 >
                   Cancel

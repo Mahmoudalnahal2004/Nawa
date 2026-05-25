@@ -1,6 +1,6 @@
 import os
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, status, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 from app.core.deps import get_db, RoleChecker
@@ -8,19 +8,31 @@ from app.core.config import settings
 from app.schemas.question import QuestionCreate, QuestionUpdate, QuestionResponse, QuestionListResponse, ImportResult
 from app.services import question_service
 from app.services.excel_service import import_excel
-
+from app.services.pdf_service import parse_pdf_questions
 router = APIRouter(prefix="/questions", tags=["Questions"])
 admin_only = RoleChecker(["admin"])
 
+from pydantic import BaseModel
+class BulkStatusUpdate(BaseModel):
+    question_ids: list[int]
+    status: str
+
+@router.patch("/bulk/status", dependencies=[Depends(admin_only)])
+async def bulk_update_status(data: BulkStatusUpdate, db: AsyncSession = Depends(get_db)):
+    await question_service.bulk_update_status(db, data.question_ids, data.status)
+    return {"detail": "Status updated"}
 
 @router.get("", response_model=QuestionListResponse, dependencies=[Depends(admin_only)])
 async def list_questions(
     page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100),
     status_filter: Optional[str] = Query(None, alias="status"),
     category_id: Optional[int] = None, search: Optional[str] = None,
-    difficulty: Optional[str] = None, db: AsyncSession = Depends(get_db),
+    difficulty: Optional[str] = None, target_year: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
 ):
-    questions, total = await question_service.get_questions_paginated(db, page, page_size, status_filter, category_id, search, difficulty)
+    questions, total = await question_service.get_questions_paginated(
+        db, page, page_size, status_filter, category_id, search, difficulty, target_year
+    )
     return QuestionListResponse(questions=questions, total=total, page=page, page_size=page_size)
 
 
@@ -74,6 +86,30 @@ async def import_questions(file: UploadFile = File(...), category_id: Optional[i
     content = await file.read()
     result = await import_excel(db, content, default_category_id=category_id)
     return result
+
+
+@router.post("/import/pdf", dependencies=[Depends(admin_only)])
+async def import_questions_pdf(
+    category_id: int = Form(...),
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db)
+):
+    if not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only PDF files are accepted")
+    
+    content = await file.read()
+    questions_to_create = await parse_pdf_questions(content, category_id)
+    
+    imported_count = 0
+    for q_data in questions_to_create:
+        try:
+            await question_service.create_question(db, q_data)
+            imported_count += 1
+        except Exception as e:
+            # Skip invalid questions or db errors
+            pass
+            
+    return {"message": "Import successful", "imported_count": imported_count}
 
 
 @router.post("/upload-image", dependencies=[Depends(admin_only)])

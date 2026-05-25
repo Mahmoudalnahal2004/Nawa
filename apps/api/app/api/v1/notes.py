@@ -18,17 +18,21 @@ async def get_all_notes(
     db: AsyncSession = Depends(get_db), 
     user: User = Depends(get_current_active_user)
 ):
+    from app.services.analytics_service import get_valid_category_ids
+    valid_cat_ids = await get_valid_category_ids(db, user.study_year, user.university)
+    valid_cond = Question.category_id.in_(valid_cat_ids) if valid_cat_ids else Question.category_id == -1
+
     count_query = (
         select(func.count(Note.id))
         .join(Question, Note.question_id == Question.id)
-        .where(Note.user_id == user.id)
+        .where(Note.user_id == user.id, valid_cond)
     )
     total = await db.scalar(count_query) or 0
 
     query = (
         select(Note, Question.question_text)
         .join(Question, Note.question_id == Question.id)
-        .where(Note.user_id == user.id)
+        .where(Note.user_id == user.id, valid_cond)
         .order_by(Note.updated_at.desc())
         .offset(skip)
         .limit(limit)

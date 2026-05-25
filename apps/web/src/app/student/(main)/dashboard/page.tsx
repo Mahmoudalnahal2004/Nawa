@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/api';
 import { toast } from 'sonner';
-import { Loader2, CheckCircle, ChevronRight, Layers, Layout, ShieldAlert, LayoutGrid, List } from 'lucide-react';
+import { Loader2, CheckCircle, ChevronRight, ChevronDown, Layers, Layout, ShieldAlert, LayoutGrid, List } from 'lucide-react';
 
 interface Category {
   id: number;
@@ -28,11 +28,32 @@ export default function QuizGeneratorPage() {
   const [selectedBlocks, setSelectedBlocks] = useState<number[]>([]);
   const [selectedTopics, setSelectedTopics] = useState<number[]>([]);
   const [availableCounts, setAvailableCounts] = useState<Record<number, number>>({});
-  const [questionCount, setQuestionCount] = useState<number>(10);
+  const [questionCount, setQuestionCount] = useState<number | string>(10);
   const [quizMode, setQuizMode] = useState<'practice' | 'exam'>('exam');
   const [timePerQuestion, setTimePerQuestion] = useState<number>(60);
   const [quizName, setQuizName] = useState<string>('');
   const [generating, setGenerating] = useState(false);
+  const [expandedCategories, setExpandedCategories] = useState<number[]>([]);
+
+  const toggleExpand = (categoryId: number) => {
+    setExpandedCategories(prev => prev.includes(categoryId) ? prev.filter(id => id !== categoryId) : [...prev, categoryId]);
+  };
+
+  const getCategoryTotalCount = (cat: Category): number => {
+    let count = availableCounts[cat.id] || 0;
+    if (cat.children) {
+      cat.children.forEach(c => { count += getCategoryTotalCount(c); });
+    }
+    return count;
+  };
+
+  const getDescendantIds = (cat: Category): number[] => {
+    let ids: number[] = [cat.id];
+    if (cat.children) {
+      cat.children.forEach(c => { ids = ids.concat(getDescendantIds(c)); });
+    }
+    return ids;
+  };
 
   useEffect(() => {
     fetchData();
@@ -87,11 +108,10 @@ export default function QuizGeneratorPage() {
     setSelectedBlocks(prev => {
       const isSelected = prev.includes(blockId);
       if (isSelected) {
-        // Deselecting block should also deselect its topics
         const block = categories.find(c => c.id === blockId);
-        if (block && block.children) {
-          const childIds = block.children.map(c => c.id);
-          setSelectedTopics(curr => curr.filter(id => !childIds.includes(id)));
+        if (block) {
+          const allIds = getDescendantIds(block);
+          setSelectedTopics(curr => curr.filter(id => !allIds.includes(id)));
         }
         return prev.filter(id => id !== blockId);
       } else {
@@ -100,20 +120,78 @@ export default function QuizGeneratorPage() {
     });
   };
 
-  const toggleTopic = (topicId: number) => {
-    setSelectedTopics(prev => 
-      prev.includes(topicId) ? prev.filter(id => id !== topicId) : [...prev, topicId]
+  const toggleTopic = (topic: Category) => {
+    const allIds = getDescendantIds(topic);
+    setSelectedTopics(prev => {
+      const isSelected = prev.includes(topic.id);
+      if (isSelected) {
+        return prev.filter(id => !allIds.includes(id));
+      } else {
+        const toAdd = allIds.filter(id => !prev.includes(id));
+        return [...prev, ...toAdd];
+      }
+    });
+  };
+
+  const renderTopicItem = (topic: Category, depth: number = 0) => {
+    const count = getCategoryTotalCount(topic);
+    const isDisabled = count === 0;
+    const hasChildren = topic.children && topic.children.length > 0;
+    const isExpanded = expandedCategories.includes(topic.id);
+    
+    return (
+      <div key={topic.id} className="space-y-2 mt-2">
+        <div className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${isDisabled ? 'opacity-40 bg-white/5 border-transparent' : selectedTopics.includes(topic.id) ? 'bg-purple-500/10 border-purple-500/30' : 'bg-white/5 border-transparent hover:bg-white/10'} ${depth > 0 ? 'ml-6' : ''}`}>
+          <div className="flex items-center gap-2 flex-1">
+            {hasChildren ? (
+              <button 
+                onClick={(e) => { e.preventDefault(); toggleExpand(topic.id); }}
+                className="p-1 rounded hover:bg-white/10 text-gray-400 transition-colors"
+              >
+                {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+              </button>
+            ) : (
+              <div className="w-6" />
+            )}
+            <label className={`flex-1 flex items-center gap-3 cursor-pointer ${isDisabled ? 'cursor-not-allowed' : ''}`}>
+              <input 
+                type="checkbox" 
+                disabled={isDisabled}
+                checked={selectedTopics.includes(topic.id)}
+                onChange={() => toggleTopic(topic)}
+                className="w-4 h-4 rounded border-gray-600 text-purple-500 focus:ring-purple-500/20 bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
+              />
+              <span className={selectedTopics.includes(topic.id) ? 'text-white font-medium' : 'text-gray-300'}>{topic.name}</span>
+            </label>
+          </div>
+          <span className={`text-xs font-mono px-2 py-1 rounded-md ${count > 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-white/5 text-gray-500'}`}>
+            {count} Qs
+          </span>
+        </div>
+        {hasChildren && isExpanded && (
+          <div className="space-y-2">
+            {topic.children!.map(child => renderTopicItem(child, depth + 1))}
+          </div>
+        )}
+      </div>
     );
   };
 
   const handleGenerate = async () => {
     if (selectedTopics.length === 0) return;
     
+    let finalCount = typeof questionCount === 'string' ? parseInt(questionCount, 10) : questionCount;
+    if (isNaN(finalCount) || finalCount < 1) finalCount = 1;
+    if (totalAvailable > 0 && finalCount > totalAvailable) {
+      toast.error(`Cannot generate quiz: you requested ${finalCount} questions, but only ${totalAvailable} are available.`);
+      return;
+    }
+
     setGenerating(true);
     try {
       const { data } = await api.post('/quiz/generate', {
         category_ids: selectedTopics,
-        question_count: questionCount,
+        question_count: finalCount,
         mode: selectedMode,
         quiz_mode: quizMode,
         quiz_name: quizName.trim() || undefined,
@@ -194,7 +272,7 @@ export default function QuizGeneratorPage() {
           {viewMode === 'grid' ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {categories.map(block => {
-                const totalCount = block.children?.reduce((sum, child) => sum + (availableCounts[child.id] || 0), 0) || 0;
+                const totalCount = getCategoryTotalCount(block);
                 const isSelected = selectedBlocks.includes(block.id);
                 const isDisabled = totalCount === 0;
                 return (
@@ -235,7 +313,7 @@ export default function QuizGeneratorPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3">
               {categories.map(block => {
-                const totalCount = block.children?.reduce((sum, child) => sum + (availableCounts[child.id] || 0), 0) || 0;
+                const totalCount = getCategoryTotalCount(block);
                 const isSelected = selectedBlocks.includes(block.id);
                 const isDisabled = totalCount === 0;
                 return (
@@ -271,27 +349,7 @@ export default function QuizGeneratorPage() {
                 <div key={block.id} className="space-y-3">
                   <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider border-b border-white/10 pb-2">{block.name}</h3>
                   <div className="space-y-2">
-                    {block.children?.map(topic => {
-                      const count = availableCounts[topic.id] || 0;
-                      const isDisabled = count === 0;
-                      return (
-                        <label key={topic.id} className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${isDisabled ? 'opacity-40 cursor-not-allowed bg-white/5 border-transparent' : selectedTopics.includes(topic.id) ? 'bg-purple-500/10 border-purple-500/30 cursor-pointer' : 'bg-white/5 border-transparent hover:bg-white/10 cursor-pointer'}`}>
-                          <div className="flex items-center gap-3">
-                            <input 
-                              type="checkbox" 
-                              disabled={isDisabled}
-                              checked={selectedTopics.includes(topic.id)}
-                              onChange={() => toggleTopic(topic.id)}
-                              className="w-4 h-4 rounded border-gray-600 text-purple-500 focus:ring-purple-500/20 bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
-                            />
-                            <span className={selectedTopics.includes(topic.id) ? 'text-white font-medium' : 'text-gray-300'}>{topic.name}</span>
-                          </div>
-                          <span className={`text-xs font-mono px-2 py-1 rounded-md ${count > 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-white/5 text-gray-500'}`}>
-                            {count} Qs
-                          </span>
-                        </label>
-                      );
-                    })}
+                    {block.children?.map(topic => renderTopicItem(topic, 0))}
                     {(!block.children || block.children.length === 0) && (
                       <p className="text-sm text-gray-500 italic">No sub-topics available.</p>
                     )}
@@ -328,7 +386,19 @@ export default function QuizGeneratorPage() {
                       <input 
                         type="number" 
                         value={questionCount} 
-                        onChange={e => setQuestionCount(parseInt(e.target.value) || 1)}
+                        onChange={e => {
+                          const val = e.target.value;
+                          if (val === '') {
+                            setQuestionCount('');
+                          } else {
+                            setQuestionCount(parseInt(val, 10) || 1);
+                          }
+                        }}
+                        onBlur={() => {
+                          let finalCount = typeof questionCount === 'string' ? parseInt(questionCount, 10) : questionCount;
+                          if (isNaN(finalCount) || finalCount < 1) finalCount = 1;
+                          setQuestionCount(finalCount);
+                        }}
                         min={1} 
                         max={totalAvailable || 100}
                         className="w-24 bg-slate-900 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:ring-1 focus:ring-blue-500/50 focus:border-blue-500/50"

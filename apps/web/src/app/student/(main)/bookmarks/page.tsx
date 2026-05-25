@@ -44,6 +44,22 @@ export default function BookmarksReviewPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
 
+  const getCategoryTotalCount = (cat: Category): number => {
+    let count = availableCounts[cat.id] || 0;
+    if (cat.children) {
+      cat.children.forEach(c => { count += getCategoryTotalCount(c); });
+    }
+    return count;
+  };
+
+  const getDescendantIds = (cat: Category): number[] => {
+    let ids: number[] = [cat.id];
+    if (cat.children) {
+      cat.children.forEach(c => { ids = ids.concat(getDescendantIds(c)); });
+    }
+    return ids;
+  };
+
   useEffect(() => {
     const handler = setTimeout(() => {
       setDebouncedSearch(searchQuery);
@@ -111,12 +127,12 @@ export default function BookmarksReviewPage() {
     }
   };
 
-  const handleSelectCategory = (categoryId: number | null, childIds: number[] = []) => {
+  const handleSelectCategory = (categoryId: number | null, allIds: number[] = []) => {
     setPage(1);
     if (categoryId === null) {
       setSelectedCategoryIds(null);
     } else {
-      setSelectedCategoryIds([categoryId, ...childIds]);
+      setSelectedCategoryIds(allIds);
     }
     setShowMobileFilter(false);
   };
@@ -129,17 +145,54 @@ export default function BookmarksReviewPage() {
   const totalPages = Math.ceil(total / pageSize);
 
   const filterTree = useMemo(() => {
-    return categories.map(parent => {
-      const children = parent.children?.filter(c => availableCounts[c.id] > 0) || [];
-      const parentCount = availableCounts[parent.id] || 0;
-      const totalCount = children.reduce((sum, c) => sum + (availableCounts[c.id] || 0), parentCount);
-      return {
-        ...parent,
-        totalCount,
-        children
-      };
-    }).filter(parent => parent.totalCount > 0);
+    const buildTree = (cats: Category[]): any[] => {
+      return cats.map(c => {
+        const totalCount = getCategoryTotalCount(c);
+        if (totalCount === 0) return null;
+        return {
+          ...c,
+          totalCount,
+          children: c.children ? buildTree(c.children) : []
+        };
+      }).filter(Boolean);
+    };
+    return buildTree(categories);
   }, [categories, availableCounts]);
+
+  const renderFilterNode = (node: any, depth: number = 0) => {
+    const isExpanded = expandedParents[node.id] === true;
+    const isSelected = selectedCategoryIds?.includes(node.id);
+    const allIds = getDescendantIds(node);
+    
+    return (
+      <div key={node.id} className={depth === 0 ? "pt-2" : "mt-1"}>
+        <div 
+          onClick={() => handleSelectCategory(node.id, allIds)}
+          className={`flex items-center justify-between px-3 py-1.5 rounded-lg cursor-pointer transition-colors group ${isSelected ? 'bg-amber-500/20 text-amber-400' : 'text-gray-300 hover:bg-white/5'}`}
+        >
+          <div className="flex items-center gap-2 font-medium text-sm">
+            {node.children && node.children.length > 0 ? (
+              <button onClick={(e) => toggleParent(node.id, e)} className="p-0.5 rounded hover:bg-white/10 text-gray-400 group-hover:text-inherit transition-colors">
+                {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRightIcon className="w-4 h-4" />}
+              </button>
+            ) : (
+              <div className="w-5" />
+            )}
+            {node.name}
+          </div>
+          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${isSelected ? 'bg-amber-500/20 text-amber-300' : 'bg-slate-800 text-gray-400 group-hover:bg-slate-700'}`}>
+            {node.totalCount}
+          </span>
+        </div>
+        
+        {isExpanded && node.children && node.children.length > 0 && (
+          <div className="ml-5 border-l border-white/10 pl-2">
+            {node.children.map((child: any) => renderFilterNode(child, depth + 1))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   if (loading && questions.length === 0 && filterTree.length === 0) {
     return (
@@ -193,50 +246,7 @@ export default function BookmarksReviewPage() {
               All Modules
             </button>
             
-            {filterTree.map(parent => {
-              const isExpanded = expandedParents[parent.id] !== false; // Default expanded
-              const parentChildIds = parent.children.map(c => c.id);
-              const isSelected = selectedCategoryIds?.includes(parent.id);
-              
-              return (
-                <div key={parent.id} className="pt-2">
-                  <div 
-                    onClick={() => handleSelectCategory(parent.id, parentChildIds)}
-                    className={`flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer transition-colors group ${isSelected ? 'bg-amber-500/20 text-amber-400' : 'text-gray-300 hover:bg-white/5'}`}
-                  >
-                    <div className="flex items-center gap-2 font-medium text-sm">
-                      <button onClick={(e) => toggleParent(parent.id, e)} className="p-0.5 rounded hover:bg-white/10 text-gray-400 group-hover:text-inherit transition-colors">
-                        {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRightIcon className="w-4 h-4" />}
-                      </button>
-                      {parent.name}
-                    </div>
-                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${isSelected ? 'bg-amber-500/20 text-amber-300' : 'bg-slate-800 text-gray-400 group-hover:bg-slate-700'}`}>
-                      {parent.totalCount}
-                    </span>
-                  </div>
-                  
-                  {isExpanded && parent.children.length > 0 && (
-                    <div className="ml-7 mt-1 space-y-1 border-l border-white/10 pl-2">
-                      {parent.children.map(child => {
-                        const childSelected = selectedCategoryIds?.length === 1 && selectedCategoryIds[0] === child.id;
-                        return (
-                          <div 
-                            key={child.id}
-                            onClick={() => handleSelectCategory(child.id)}
-                            className={`flex items-center justify-between px-3 py-1.5 rounded-lg cursor-pointer transition-colors ${childSelected ? 'bg-amber-500/20 text-amber-400' : 'text-gray-400 hover:bg-white/5 hover:text-gray-200'}`}
-                          >
-                            <span className="text-sm">{child.name}</span>
-                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${childSelected ? 'bg-amber-500/20 text-amber-300' : 'bg-slate-800 text-gray-500'}`}>
-                              {availableCounts[child.id]}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+            {filterTree.map(parent => renderFilterNode(parent, 0))}
           </div>
         </div>
 

@@ -143,18 +143,21 @@ async def update_category(db: AsyncSession, category_id: int, data: CategoryUpda
     return category
 
 
-async def delete_category(db: AsyncSession, category_id: int) -> bool:
-    """Delete a category if it has no questions."""
+async def delete_category(db: AsyncSession, category_id: int, password: str | None = None) -> tuple[bool, str]:
+    """Delete a category if it has no questions, or if the correct password is provided."""
     # Check for questions
     q_count = await db.execute(
         select(func.count(Question.id)).where(Question.category_id == category_id)
     )
     if q_count.scalar_one() > 0:
-        return False
+        if password != "0000":
+            return False, "Cannot delete category with existing questions. Please provide the correct password."
+        # If password is correct, delete the questions first
+        await db.execute(delete(Question).where(Question.category_id == category_id))
 
     await db.execute(delete(Category).where(Category.id == category_id))
     await db.flush()
-    return True
+    return True, "Category deleted"
 
 
 async def get_category_by_id(db: AsyncSession, category_id: int) -> Category | None:

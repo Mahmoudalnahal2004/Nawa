@@ -23,7 +23,14 @@ async def get_bookmarks(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_active_user)
 ):
+    from app.services.analytics_service import get_valid_category_ids
+    valid_cat_ids = await get_valid_category_ids(db, user.study_year, user.university)
+    
     conds = [Bookmark.user_id == user.id]
+    if valid_cat_ids:
+        conds.append(Question.category_id.in_(valid_cat_ids))
+    else:
+        conds.append(Question.category_id == -1)
     
     if category_ids:
         try:

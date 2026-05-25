@@ -51,8 +51,8 @@ async def update_category(category_id: int, data: CategoryUpdate, db: AsyncSessi
 
 
 @router.delete("/{category_id}", dependencies=[Depends(admin_only)])
-async def delete_category(category_id: int, db: AsyncSession = Depends(get_db)):
-    success = await category_service.delete_category(db, category_id)
+async def delete_category(category_id: int, password: str | None = None, db: AsyncSession = Depends(get_db)):
+    success, message = await category_service.delete_category(db, category_id, password)
     if not success:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot delete category with existing questions")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
     return {"detail": "Category deleted"}

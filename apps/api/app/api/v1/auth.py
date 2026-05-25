@@ -65,5 +65,17 @@ async def refresh_token(data: RefreshRequest, db: AsyncSession = Depends(get_db)
 
 
 @router.get("/me", response_model=UserResponse)
-async def get_me(current_user: User = Depends(get_current_active_user)):
+async def get_me(current_user: User = Depends(get_current_active_user), db: AsyncSession = Depends(get_db)):
+    from datetime import date, timedelta
+    today = date.today()
+    if current_user.last_login_date != today:
+        if current_user.last_login_date is None:
+            current_user.current_streak = 1
+        elif current_user.last_login_date == today - timedelta(days=1):
+            current_user.current_streak += 1
+        else:
+            current_user.current_streak = 1
+        current_user.last_login_date = today
+        await db.commit()
+        await db.refresh(current_user)
     return UserResponse.model_validate(current_user)

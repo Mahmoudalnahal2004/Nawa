@@ -47,9 +47,10 @@ export function BulkImportModal({ isOpen, onClose, onSuccess, categoryId }: Bulk
   };
 
   const validateAndSetFile = (selectedFile: File) => {
-    const isExcel = selectedFile.name.endsWith('.xlsx') || selectedFile.name.endsWith('.xls');
-    if (!isExcel) {
-      toast.error('Only Excel files (.xlsx, .xls) are allowed.');
+    const name = selectedFile.name.toLowerCase();
+    const isValid = name.endsWith('.xlsx') || name.endsWith('.xls') || name.endsWith('.csv') || name.endsWith('.pdf');
+    if (!isValid) {
+      toast.error('Only Excel, CSV, or PDF files are allowed.');
       return;
     }
     setFile(selectedFile);
@@ -66,11 +67,16 @@ export function BulkImportModal({ isOpen, onClose, onSuccess, categoryId }: Bulk
     }
 
     try {
-      const { data } = await api.post('/questions/import', formData, {
+      const endpoint = file.name.toLowerCase().endsWith('.pdf') ? '/questions/import/pdf' : '/questions/import';
+      const { data } = await api.post(endpoint, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       
-      toast.success(`Import complete! ${data.imported} imported, ${data.skipped} skipped.`);
+      if (data.imported_count !== undefined) {
+        toast.success(`Import complete! ${data.imported_count} imported.`);
+      } else {
+        toast.success(`Import complete! ${data.imported} imported, ${data.skipped} skipped.`);
+      }
       
       if (data.errors && data.errors.length > 0) {
         console.warn('Import errors:', data.errors);
@@ -95,7 +101,7 @@ export function BulkImportModal({ isOpen, onClose, onSuccess, categoryId }: Bulk
         <div className="flex items-center justify-between p-6 border-b border-white/10">
           <div>
             <h2 className="text-xl font-bold text-white">Bulk Import</h2>
-            <p className="text-sm text-gray-400 mt-1">Upload an Excel file to bulk import questions.</p>
+            <p className="text-sm text-gray-400 mt-1">Upload an Excel, CSV, or PDF file to bulk import questions.</p>
           </div>
           <button 
             onClick={onClose}
@@ -141,7 +147,7 @@ export function BulkImportModal({ isOpen, onClose, onSuccess, categoryId }: Bulk
             <input 
               type="file" 
               className="hidden" 
-              accept=".xlsx, .xls"
+              accept=".xlsx,.xls,.csv,.pdf"
               ref={fileInputRef}
               onChange={handleFileChange}
             />
@@ -163,8 +169,9 @@ export function BulkImportModal({ isOpen, onClose, onSuccess, categoryId }: Bulk
                 <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mb-4">
                   <UploadCloud className="w-8 h-8 text-gray-400" />
                 </div>
-                <p className="text-white font-medium mb-1">Click to upload or drag and drop</p>
-                <p className="text-gray-500 text-sm">XLSX or XLS files only (max. 10MB)</p>
+                <p className="text-white font-medium mb-1">Upload Excel, CSV, or PDF</p>
+                <p className="text-gray-500 text-sm">XLSX, XLS, CSV, or PDF (max. 10MB)</p>
+                <p className="text-gray-500 text-xs mt-2 max-w-xs">PDFs must follow the standard Q1. / A. B. C. format with the answer key at the end.</p>
               </>
             )}
           </div>

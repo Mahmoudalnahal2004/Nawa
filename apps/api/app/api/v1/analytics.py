@@ -13,7 +13,7 @@ student_only = RoleChecker(["student"])
 
 @router.get("/progress", response_model=OverallProgress, dependencies=[Depends(student_only)])
 async def get_progress(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_active_user)):
-    return await analytics_service.get_overall_progress(db, user.id)
+    return await analytics_service.get_overall_progress(db, user.id, user.study_year, user.university)
 
 
 @router.get("/by-category", response_model=List[CategoryProgress], dependencies=[Depends(student_only)])
@@ -22,13 +22,13 @@ async def get_category_progress(db: AsyncSession = Depends(get_db), user: User =
 
 
 @router.get("/weak-points", response_model=List[WeakPointQuestion], dependencies=[Depends(student_only)])
-async def get_weak_points(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_active_user)):
-    return await analytics_service.get_weak_points(db, user.id)
+async def get_weak_points_api(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_active_user)):
+    return await analytics_service.get_weak_points(db, user.id, user.study_year, user.university)
 
 
 @router.post("/weak-points/quiz", response_model=QuizSessionResponse, dependencies=[Depends(student_only)])
 async def start_weak_points_quiz(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_active_user)):
-    weak = await analytics_service.get_weak_points(db, user.id)
+    weak = await analytics_service.get_weak_points(db, user.id, user.study_year, user.university)
     if not weak:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No weak points found")
     # Group by first category and create quiz
@@ -51,7 +51,7 @@ async def start_weak_points_quiz(db: AsyncSession = Depends(get_db), user: User 
 
 @router.get("/me", response_model=AnalyticsDashboardResponse, dependencies=[Depends(student_only)])
 async def get_analytics_dashboard(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_active_user)):
-    overall = await analytics_service.get_overall_progress(db, user.id)
+    overall = await analytics_service.get_overall_progress(db, user.id, user.study_year, user.university)
     categories = await analytics_service.get_category_progress(db, user.id, user.study_year, user.university)
     recent_sessions = await quiz_service.get_recent_sessions(db, user.id)
     return AnalyticsDashboardResponse(
@@ -80,7 +80,7 @@ async def get_incorrect_questions(
     from app.schemas.question import QuestionListResponse, QuestionResponse
     from app.services import analytics_service
 
-    weak_points = await analytics_service.get_weak_points(db, user.id)
+    weak_points = await analytics_service.get_weak_points(db, user.id, user.study_year, user.university)
     weak_qids = [wp.question_id for wp in weak_points]
 
     conds = [
