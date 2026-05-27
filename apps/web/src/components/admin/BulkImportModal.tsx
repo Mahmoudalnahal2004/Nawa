@@ -10,9 +10,10 @@ interface BulkImportModalProps {
   onClose: () => void;
   onSuccess: () => void;
   categoryId?: number;
+  onPdfParsed?: (questions: any[]) => void;
 }
 
-export function BulkImportModal({ isOpen, onClose, onSuccess, categoryId }: BulkImportModalProps) {
+export function BulkImportModal({ isOpen, onClose, onSuccess, categoryId, onPdfParsed }: BulkImportModalProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
@@ -67,24 +68,34 @@ export function BulkImportModal({ isOpen, onClose, onSuccess, categoryId }: Bulk
     }
 
     try {
-      const endpoint = file.name.toLowerCase().endsWith('.pdf') ? '/questions/import/pdf' : '/questions/import';
-      const { data } = await api.post(endpoint, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      const isPdf = file.name.toLowerCase().endsWith('.pdf');
       
-      if (data.imported_count !== undefined) {
-        toast.success(`Import complete! ${data.imported_count} imported.`);
+      if (isPdf) {
+        const { data } = await api.post('/questions/parse-pdf', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        toast.success(`Successfully parsed ${data.questions.length} questions from PDF`);
+        onPdfParsed?.(data.questions);
+        onClose();
       } else {
-        toast.success(`Import complete! ${data.imported} imported, ${data.skipped} skipped.`);
+        const { data } = await api.post('/questions/import', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        
+        if (data.imported_count !== undefined) {
+          toast.success(`Import complete! ${data.imported_count} imported.`);
+        } else {
+          toast.success(`Import complete! ${data.imported} imported, ${data.skipped} skipped.`);
+        }
+        
+        if (data.errors && data.errors.length > 0) {
+          console.warn('Import errors:', data.errors);
+          toast.warning('Some rows had errors. Check console for details.');
+        }
+        
+        onSuccess();
+        onClose();
       }
-      
-      if (data.errors && data.errors.length > 0) {
-        console.warn('Import errors:', data.errors);
-        toast.warning('Some rows had errors. Check console for details.');
-      }
-      
-      onSuccess();
-      onClose();
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Failed to import questions');
     } finally {
@@ -159,7 +170,7 @@ export function BulkImportModal({ isOpen, onClose, onSuccess, categoryId }: Bulk
                 <p className="text-gray-500 text-sm mt-1">{(file.size / 1024).toFixed(1)} KB</p>
                 <button 
                   onClick={(e) => { e.stopPropagation(); setFile(null); }}
-                  className="mt-4 text-xs text-rose-400 hover:text-rose-300"
+                  className="mt-4 text-xs text-rose-400 hover:text-rose-350"
                 >
                   Remove file
                 </button>
@@ -193,7 +204,7 @@ export function BulkImportModal({ isOpen, onClose, onSuccess, categoryId }: Bulk
           >
             {loading ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin" /> Uploading...
+                <Loader2 className="w-4 h-4 animate-spin" /> {file?.name.toLowerCase().endsWith('.pdf') ? 'Analyzing PDF... Please wait' : 'Uploading...'}
               </>
             ) : (
               'Import Questions'

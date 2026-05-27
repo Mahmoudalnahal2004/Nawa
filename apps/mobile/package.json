@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "dependencies": {
     "@expo/ui": "~56.0.14",
+    "@react-navigation/drawer": "^7.10.3",
     "axios": "^1.16.1",
     "expo": "~56.0.5",
     "expo-constants": "~56.0.16",
@@ -11,6 +12,7 @@
     "expo-font": "~56.0.5",
     "expo-glass-effect": "~56.0.4",
     "expo-image": "~56.0.9",
+    "expo-image-picker": "~56.0.14",
     "expo-linking": "~56.0.12",
     "expo-router": "~56.2.7",
     "expo-secure-store": "~56.0.4",

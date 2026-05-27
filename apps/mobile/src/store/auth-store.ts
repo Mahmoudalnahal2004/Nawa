@@ -11,6 +11,8 @@ export interface User {
   study_year?: number | null;
   university?: string | null;
   current_streak?: number;
+  is_anonymous?: boolean;
+  avatar_uri?: string | null;
 }
 
 interface AuthState {

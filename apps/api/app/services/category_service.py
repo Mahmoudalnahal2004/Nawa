@@ -64,7 +64,29 @@ async def get_categories_tree(db: AsyncSession, user: User, target_year: int | N
         if not user_loaded.quota_id or not user_loaded.quota:
             return []
             
-        allowed_category_ids = [cat.id for cat in user_loaded.quota.categories]
+        # Get all categories from the database to build parent-to-child map for descendant resolution
+        result_cats = await db.execute(select(Category.id, Category.parent_id))
+        all_cats = result_cats.all()
+        
+        parent_map = {}
+        for row in all_cats:
+            c_id, p_id = row[0], row[1]
+            if p_id is not None:
+                if p_id not in parent_map:
+                    parent_map[p_id] = []
+                parent_map[p_id].append(c_id)
+                
+        # Traverse downwards from quota categories to collect all descendant IDs
+        allowed = set()
+        stack = [cat.id for cat in user_loaded.quota.categories]
+        while stack:
+            curr = stack.pop()
+            if curr not in allowed:
+                allowed.add(curr)
+                if curr in parent_map:
+                    stack.extend(parent_map[curr])
+                    
+        allowed_category_ids = list(allowed)
         if not allowed_category_ids:
             return []
             

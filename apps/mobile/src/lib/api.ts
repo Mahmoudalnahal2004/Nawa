@@ -1,11 +1,22 @@
 import axios from 'axios';
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 import { getSecureItem, setSecureItem, clearAuthSession } from './secure-store';
 
 // Dynamic host resolution for development:
-// - Android Emulator requires 10.0.2.2 to access host machine's localhost
-// - iOS Simulator and Web can use localhost (or 127.0.0.1)
-const DEFAULT_API_URL = Platform.select({
+// - Extracts debugger host machine IP using expo-constants if running in Expo Go (physical device or emulator)
+// - Fallback to 10.0.2.2 for Android emulators
+// - Fallback to localhost for simulators and web
+const getDevIPAddress = (): string | null => {
+  const hostUri = Constants.expoConfig?.hostUri; // e.g. "192.168.1.20:8081"
+  if (hostUri) {
+    const ip = hostUri.split(':')[0];
+    return `http://${ip}:8000`;
+  }
+  return null;
+};
+
+const DEFAULT_API_URL = getDevIPAddress() || Platform.select({
   android: 'http://10.0.2.2:8000',
   default: 'http://localhost:8000',
 });

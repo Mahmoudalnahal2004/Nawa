@@ -147,24 +147,13 @@ export default function StudentDashboard() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* Welcome & Streak Header */}
+      {/* Pinned Top Bar Header */}
       <View style={styles.header}>
         <View style={styles.headerWelcome}>
           <View style={styles.stethoscopeBadge}>
             <Stethoscope color="#ffffff" size={20} />
           </View>
-          <View>
-            <ThemedText style={styles.welcomeSub} type="small">Welcome back,</ThemedText>
-            <ThemedText style={styles.welcomeTitle} type="smallBold">Dr. {getFirstName()}</ThemedText>
-          </View>
-        </View>
-
-        {/* Streak Flame */}
-        <View style={styles.streakBadge}>
-          <Flame color={Colors.orange[400]} size={18} fill={Colors.orange[400]} />
-          <ThemedText style={styles.streakText} type="smallBold">
-            {user?.current_streak || 0}
-          </ThemedText>
+          <ThemedText style={styles.headerAppName} type="smallBold">Nawa Q-Bank</ThemedText>
         </View>
       </View>
 
@@ -180,171 +169,216 @@ export default function StudentDashboard() {
           />
         }
       >
-        {/* Quick Stats Grid */}
-        <View style={styles.statsGrid}>
-          {/* Card 1: Total Answered */}
-          <View style={styles.statCard}>
-            <View style={[styles.statIconWrapper, { backgroundColor: 'rgba(16, 185, 129, 0.08)' }]}>
-              <CheckCircle color={Colors.emerald[500]} size={20} />
-            </View>
-            <ThemedText style={styles.statLabel} type="small">Answered</ThemedText>
-            <ThemedText style={styles.statValue} type="subtitle">
-              {overall?.total_answered || 0}
+        {/* Hero Welcome Glass Card */}
+        <View style={styles.heroCard}>
+          <View style={styles.heroGradient1} />
+          <View style={styles.heroGradient2} />
+          
+          <View style={styles.heroContent}>
+            <ThemedText style={styles.heroWelcomeTitle} type="title">
+              Welcome back, <ThemedText style={{ color: Colors.emerald[400], fontWeight: '800' }} type="title">{getFirstName()}</ThemedText>!
             </ThemedText>
-            <ThemedText style={styles.statSubText} type="small">
-              {overall?.correct_count || 0} Correct
+            <ThemedText style={styles.heroWelcomeSub} type="small">
+              Ready to crush your exams today? Let's keep that momentum going.
+            </ThemedText>
+
+            {/* Quick Metrics row */}
+            <View style={styles.heroMetricsRow}>
+              {/* Card 1: Rank */}
+              <View style={styles.heroMetricBadge}>
+                <View style={[styles.heroMetricIconBg, { backgroundColor: 'rgba(16, 185, 129, 0.15)' }]}>
+                  <Award color={Colors.emerald[400]} size={16} />
+                </View>
+                <View style={{ gap: 1 }}>
+                  <ThemedText style={styles.heroMetricLabel} type="small">Overall Rank</ThemedText>
+                  <ThemedText style={styles.heroMetricValue} type="smallBold">
+                    {overall?.rank ? `#${overall.rank}` : '-'}
+                  </ThemedText>
+                </View>
+              </View>
+
+              {/* Card 2: Streak */}
+              <View style={styles.heroMetricBadge}>
+                <View style={[styles.heroMetricIconBg, { backgroundColor: 'rgba(251, 146, 60, 0.15)' }]}>
+                  <Flame color={Colors.orange[400]} size={16} fill={Colors.orange[400]} />
+                </View>
+                <View style={{ gap: 1 }}>
+                  <ThemedText style={styles.heroMetricLabel} type="small">Streak</ThemedText>
+                  <ThemedText style={styles.heroMetricValue} type="smallBold">
+                    {user?.current_streak || 0} Days
+                  </ThemedText>
+                </View>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* Quick Actions Stack */}
+        <View style={styles.ctaGridContainer}>
+          {/* Action 1: Create Custom Quiz */}
+          <TouchableOpacity
+            style={[styles.actionCtaCard, { borderColor: 'rgba(16, 185, 129, 0.25)', backgroundColor: 'rgba(16, 185, 129, 0.02)' }]}
+            onPress={() => router.push('/(student)/study')}
+            activeOpacity={0.85}
+          >
+            <View style={styles.ctaLeft}>
+              <View style={[styles.ctaIconBg, { borderColor: 'rgba(16, 185, 129, 0.2)', backgroundColor: 'rgba(16, 185, 129, 0.08)' }]}>
+                <BookOpen color={Colors.emerald[400]} size={20} />
+              </View>
+              <View style={styles.ctaText}>
+                <ThemedText style={styles.ctaTitle} type="smallBold">Create Custom Quiz</ThemedText>
+                <ThemedText style={styles.ctaSubtitle} type="small">Generate a personalized exam tailored to specific topics.</ThemedText>
+              </View>
+            </View>
+            <ChevronRight color={Colors.emerald[400]} size={18} />
+          </TouchableOpacity>
+
+          {/* Action 2: Review Weak Points */}
+          <TouchableOpacity
+            style={[styles.actionCtaCard, { borderColor: 'rgba(244, 63, 94, 0.25)', backgroundColor: 'rgba(244, 63, 94, 0.02)' }]}
+            onPress={() => router.push('/(student)/study?pool=Incorrect')}
+            activeOpacity={0.85}
+          >
+            <View style={styles.ctaLeft}>
+              <View style={[styles.ctaIconBg, { borderColor: 'rgba(244, 63, 94, 0.2)', backgroundColor: 'rgba(244, 63, 94, 0.08)' }]}>
+                <AlertTriangle color={Colors.rose[500]} size={20} />
+              </View>
+              <View style={styles.ctaText}>
+                <ThemedText style={styles.ctaTitle} type="smallBold">Review Weak Points</ThemedText>
+                <ThemedText style={styles.ctaSubtitle} type="small">Focus on questions you've struggled with to improve scores.</ThemedText>
+              </View>
+            </View>
+            <ChevronRight color={Colors.rose[500]} size={18} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Section: Progress Overview */}
+        <View style={styles.sectionHeader}>
+          <ThemedText style={styles.sectionTitle} type="smallBold">Your Progress Overview</ThemedText>
+        </View>
+
+        <View style={styles.progressOverviewGrid}>
+          {/* Card 1: Total Answered */}
+          <View style={[styles.progressOverviewCard, { borderLeftColor: '#6366f1' }]}>
+            <View style={styles.overviewCardHeader}>
+              <BookOpen color="#818cf8" size={14} />
+              <ThemedText style={[styles.overviewCardLabel, { color: '#818cf8' }]} type="small">TOTAL QUESTIONS</ThemedText>
+            </View>
+            <ThemedText style={styles.overviewCardValue} type="subtitle">
+              {overall?.total_answered || 0}
             </ThemedText>
           </View>
 
           {/* Card 2: Overall Accuracy */}
-          <View style={styles.statCard}>
-            <View style={[styles.statIconWrapper, { backgroundColor: 'rgba(251, 146, 60, 0.08)' }]}>
-              <Award color={Colors.orange[400]} size={20} />
+          <View style={[styles.progressOverviewCard, { borderLeftColor: Colors.emerald[500] }]}>
+            <View style={styles.overviewCardHeader}>
+              <Award color={Colors.emerald[400]} size={14} />
+              <ThemedText style={[styles.overviewCardLabel, { color: Colors.emerald[400] }]} type="small">OVERALL ACCURACY</ThemedText>
             </View>
-            <ThemedText style={styles.statLabel} type="small">Accuracy</ThemedText>
-            <ThemedText style={styles.statValue} type="subtitle">
-              {overall?.accuracy_percentage !== undefined ? `${overall.accuracy_percentage.toFixed(0)}%` : '0%'}
-            </ThemedText>
-            {/* Visual accuracy mini bar */}
-            <View style={styles.miniProgressBarOuter}>
-              <View style={[
-                styles.miniProgressBarInner,
-                { width: `${overall?.accuracy_percentage || 0}%` }
-              ]} />
+            <View style={{ gap: 4 }}>
+              <ThemedText style={styles.overviewCardValue} type="subtitle">
+                {overall?.accuracy_percentage !== undefined ? `${overall.accuracy_percentage.toFixed(0)}%` : '0%'}
+              </ThemedText>
+              <View style={styles.overviewProgressBarOuter}>
+                <View style={[styles.overviewProgressBarInner, { width: `${overall?.accuracy_percentage || 0}%` }]} />
+              </View>
             </View>
           </View>
 
-          {/* Card 3: Weak Points */}
-          <View style={[styles.statCard, { width: '100%', flexDirection: 'row', alignItems: 'center', height: 90 }]}>
-            <View style={[styles.statIconWrapper, { backgroundColor: 'rgba(244, 63, 94, 0.08)', marginRight: 16 }]}>
-              <AlertTriangle color={Colors.rose[500]} size={22} />
+          {/* Card 3: Correct Answers */}
+          <View style={[styles.progressOverviewCard, { borderLeftColor: '#10b981' }]}>
+            <View style={styles.overviewCardHeader}>
+              <CheckCircle color="#34d399" size={14} />
+              <ThemedText style={[styles.overviewCardLabel, { color: '#34d399' }]} type="small">CORRECT ANSWERS</ThemedText>
             </View>
-            <View style={{ flex: 1 }}>
-              <ThemedText style={styles.statLabel} type="small">Identified Weak Points</ThemedText>
-              <ThemedText style={styles.statValue} type="subtitle">
-                {overall?.weak_points_count || 0}
-              </ThemedText>
+            <ThemedText style={styles.overviewCardValue} type="subtitle">
+              {overall?.correct_count || 0}
+            </ThemedText>
+          </View>
+
+          {/* Card 4: Weak Points */}
+          <View style={[styles.progressOverviewCard, { borderLeftColor: Colors.rose[500] }]}>
+            <View style={styles.overviewCardHeader}>
+              <AlertTriangle color={Colors.rose[500]} size={14} />
+              <ThemedText style={[styles.overviewCardLabel, { color: Colors.rose[500] }]} type="small">WEAK POINTS</ThemedText>
             </View>
-            <TouchableOpacity 
-              style={styles.weakPointsAction}
-              onPress={() => router.push('/(student)/study')}
-            >
-              <ChevronRight color={Colors.rose[500]} size={20} />
-            </TouchableOpacity>
+            <ThemedText style={styles.overviewCardValue} type="subtitle">
+              {overall?.weak_points_count || 0}
+            </ThemedText>
           </View>
         </View>
 
-        {/* Section: Recent Activity */}
-        <View style={styles.sectionHeader}>
+        {/* Section: Recent Activity Vertical list */}
+        <View style={styles.sectionHeaderRow}>
           <ThemedText style={styles.sectionTitle} type="smallBold">Recent Quiz Activity</ThemedText>
+          <TouchableOpacity onPress={() => router.push('/(student)/profile')}>
+            <ThemedText style={styles.sectionActionText} type="small">View Profile</ThemedText>
+          </TouchableOpacity>
         </View>
 
         {recentSessions.length === 0 ? (
           <View style={styles.emptyActivityCard}>
             <Clock color={Colors.slate[400]} size={24} style={{ marginBottom: 8 }} />
-            <ThemedText style={{ color: Colors.slate[400], textAlign: 'center' }} type="small">
-              No recent quizzes recorded.{'\n'}Go to the Study Hub to create one!
+            <ThemedText style={{ color: Colors.slate[400], textAlign: 'center', marginBottom: 12 }} type="small">
+              No recent quizzes recorded. Go to the Study Hub to generate one!
             </ThemedText>
+            <TouchableOpacity
+              style={styles.emptyActivityBtn}
+              onPress={() => router.push('/(student)/study')}
+              activeOpacity={0.8}
+            >
+              <ThemedText style={{ color: '#ffffff' }} type="smallBold">
+                Start Learning Now
+              </ThemedText>
+            </TouchableOpacity>
           </View>
         ) : (
-          <FlatList
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            data={recentSessions}
-            keyExtractor={(item) => item.session_id}
-            renderItem={({ item }) => (
-              <View style={styles.recentSessionCard}>
-                <View style={styles.recentSessionTop}>
-                  <ThemedText style={styles.recentCategoryName} type="smallBold" numberOfLines={1}>
-                    {item.category_name}
-                  </ThemedText>
-                  <View style={[
-                    styles.scoreBadge,
-                    { backgroundColor: item.score_percentage >= 70 ? 'rgba(16, 185, 129, 0.1)' : 'rgba(251, 146, 60, 0.1)' }
-                  ]}>
-                    <ThemedText style={[
-                      styles.scoreBadgeText,
-                      { color: item.score_percentage >= 70 ? Colors.emerald[400] : Colors.orange[400] }
-                    ]} type="smallBold">
-                      {item.score_percentage.toFixed(0)}%
-                    </ThemedText>
-                  </View>
-                </View>
-
-                <View style={styles.recentSessionFooter}>
-                  <Clock color={Colors.slate[400]} size={12} style={{ marginRight: 4 }} />
-                  <ThemedText style={styles.recentSessionDate} type="small">
-                    {new Date(item.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                  </ThemedText>
-                  <ThemedText style={styles.recentSessionMode} type="small">
-                    • {item.mode === 'study' ? 'Study' : 'Test'}
-                  </ThemedText>
-                </View>
-              </View>
-            )}
-            contentContainerStyle={styles.horizontalListContent}
-          />
-        )}
-
-        {/* Section: Module Category Progress */}
-        <View style={styles.sectionHeader}>
-          <ThemedText style={styles.sectionTitle} type="smallBold">Medical Specialities Progress</ThemedText>
-        </View>
-
-        {categories.length === 0 ? (
-          <View style={styles.emptyActivityCard}>
-            <BookOpen color={Colors.slate[400]} size={24} style={{ marginBottom: 8 }} />
-            <ThemedText style={{ color: Colors.slate[400], textAlign: 'center' }} type="small">
-              No active syllabus modules available.
-            </ThemedText>
-          </View>
-        ) : (
-          <View style={styles.categoriesList}>
-            {categories.map((item) => {
-              const progressPercentage = item.total_questions > 0 
-                ? (item.answered_count / item.total_questions) * 100 
-                : 0;
-
+          <View style={styles.verticalRecentFeed}>
+            {recentSessions.slice(0, 3).map((quiz) => {
+              const score = Math.round(quiz.score_percentage || 0);
               return (
-                <View key={item.category_id} style={styles.categoryCard}>
-                  <View style={styles.categoryHeader}>
-                    <View style={styles.categoryInfo}>
-                      <View style={styles.categoryIconBackground}>
-                        <BookOpen color={Colors.emerald[500]} size={16} />
-                      </View>
-                      <ThemedText style={styles.categoryCardName} type="smallBold">
-                        {item.category_name}
-                      </ThemedText>
+                <View key={quiz.session_id} style={styles.recentFeedItem}>
+                  <View style={styles.feedItemLeft}>
+                    <View style={[
+                      styles.scoreCircleBg,
+                      { backgroundColor: score >= 80 ? 'rgba(16, 185, 129, 0.08)' : score >= 50 ? 'rgba(251, 146, 60, 0.08)' : 'rgba(244, 63, 94, 0.08)' }
+                    ]}>
+                      {score >= 80 ? (
+                        <CheckCircle color={Colors.emerald[400]} size={16} />
+                      ) : score >= 50 ? (
+                        <Award color={Colors.orange[400]} size={16} />
+                      ) : (
+                        <AlertTriangle color={Colors.rose[500]} size={16} />
+                      )}
                     </View>
                     
-                    <ThemedText style={styles.categoryCountText} type="small">
-                      {item.answered_count} / {item.total_questions} Qs
-                    </ThemedText>
-                  </View>
-
-                  {/* Category Progress Bar */}
-                  <View style={styles.categoryProgressOuter}>
-                    <View style={[
-                      styles.categoryProgressInner,
-                      { width: `${progressPercentage}%` }
-                    ]} />
-                  </View>
-
-                  {/* Strongest / Weakest tags */}
-                  <View style={styles.categorySubStats}>
-                    <ThemedText style={styles.categoryAccuracy} type="small">
-                      Avg. Accuracy: <ThemedText style={{ color: Colors.emerald[400], fontWeight: '700' }} type="small">
-                        {item.accuracy_percentage.toFixed(0)}%
+                    <View style={{ flex: 1, gap: 2 }}>
+                      <ThemedText style={styles.feedItemName} type="smallBold" numberOfLines={1}>
+                        {quiz.quiz_name || quiz.category_name || `Quiz Session #${quiz.session_id.substring(0, 8)}`}
                       </ThemedText>
-                    </ThemedText>
-
-                    {item.weakest_subcategory && (
-                      <View style={styles.weakSubBadge}>
-                        <ThemedText style={styles.weakSubText} type="small">
-                          Needs Review
+                      <View style={styles.feedItemSubRow}>
+                        <Clock color={Colors.slate[400]} size={10} />
+                        <ThemedText style={styles.feedItemSubText} type="small">
+                          {new Date(quiz.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                        </ThemedText>
+                        <ThemedText style={styles.feedItemSubText} type="small">
+                          • {quiz.total_questions} Qs
+                        </ThemedText>
+                        <ThemedText style={styles.feedItemSubText} type="small">
+                          • <ThemedText style={{ color: quiz.status === 'in_progress' ? Colors.orange[400] : Colors.emerald[400] }} type="small">{quiz.status === 'in_progress' ? 'In Progress' : 'Completed'}</ThemedText>
                         </ThemedText>
                       </View>
-                    )}
+                    </View>
+                  </View>
+                  
+                  <View style={styles.feedItemRight}>
+                    <ThemedText style={[
+                      styles.feedItemScoreText,
+                      { color: score >= 80 ? Colors.emerald[400] : score >= 50 ? Colors.orange[400] : Colors.rose[500] }
+                    ]} type="smallBold">
+                      {score}%
+                    </ThemedText>
+                    <ThemedText style={{ color: '#64748b', fontSize: 10 }} type="small">Score</ThemedText>
                   </View>
                 </View>
               );
@@ -397,13 +431,13 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 10,
   },
-  /* Welcome header */
+  /* Welcome header minimal */
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: '#1e293b', // navy-800
     backgroundColor: '#020617',
@@ -411,112 +445,264 @@ const styles = StyleSheet.create({
   headerWelcome: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
+  },
+  headerAppName: {
+    color: '#ffffff',
+    fontSize: 15,
   },
   stethoscopeBadge: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 32,
+    height: 32,
+    borderRadius: 8,
     backgroundColor: Colors.emerald[500],
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: Colors.emerald[500],
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    elevation: 3,
   },
-  welcomeSub: {
-    color: '#94a3b8',
-    lineHeight: 14,
-  },
-  welcomeTitle: {
-    color: '#ffffff',
-    fontSize: 16,
-    lineHeight: 18,
-  },
-  streakBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(251, 146, 60, 0.1)',
+  /* Hero card glass styling */
+  heroCard: {
+    backgroundColor: '#0f172a',
+    marginHorizontal: 20,
+    marginTop: 20,
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: 'rgba(251, 146, 60, 0.2)',
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    gap: 6,
+    borderColor: '#1e293b',
+    padding: 22,
+    position: 'relative',
+    overflow: 'hidden',
   },
-  streakText: {
-    color: Colors.orange[400],
+  heroGradient1: {
+    position: 'absolute',
+    top: -40,
+    right: -40,
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
   },
-  /* Scroll content */
-  scrollContent: {
-    paddingBottom: 40,
+  heroGradient2: {
+    position: 'absolute',
+    bottom: -40,
+    left: -40,
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: 'rgba(99, 102, 241, 0.1)',
   },
-  /* Stats grid */
-  statsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    padding: 20,
-    gap: 12,
+  heroContent: {
+    gap: 16,
+    zIndex: 1,
   },
-  statCard: {
-    flex: 1,
-    minWidth: (width - 52) / 2,
-    backgroundColor: '#0f172a', // navy-900 glass
-    borderWidth: 1,
-    borderColor: '#1e293b', // navy-800
-    borderRadius: 18,
-    padding: 16,
-    gap: 6,
-  },
-  statIconWrapper: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  statLabel: {
-    color: '#94a3b8',
-    fontWeight: '600',
-    fontSize: 12,
-  },
-  statValue: {
+  heroWelcomeTitle: {
     color: '#ffffff',
     fontSize: 22,
     fontWeight: '800',
-    lineHeight: 24,
+    lineHeight: 28,
   },
-  statSubText: {
+  heroWelcomeSub: {
+    color: '#94a3b8',
+    lineHeight: 18,
+    fontSize: 13,
+  },
+  heroMetricsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 4,
+  },
+  heroMetricBadge: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(2, 6, 23, 0.4)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 14,
+    padding: 10,
+    gap: 10,
+  },
+  heroMetricIconBg: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  heroMetricLabel: {
     color: '#64748b',
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  heroMetricValue: {
+    color: '#ffffff',
     fontSize: 12,
   },
-  miniProgressBarOuter: {
+  /* CTA Stack styles */
+  ctaGridContainer: {
+    paddingHorizontal: 20,
+    gap: 12,
+    marginTop: 18,
+  },
+  actionCtaCard: {
+    borderWidth: 1.5,
+    borderRadius: 18,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  ctaLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  ctaIconBg: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+  },
+  ctaText: {
+    flex: 1,
+    gap: 1,
+  },
+  ctaTitle: {
+    color: '#ffffff',
+    fontSize: 14,
+  },
+  ctaSubtitle: {
+    color: '#94a3b8',
+    fontSize: 11,
+    lineHeight: 14,
+  },
+  /* Progress Overview Grid (2x2) */
+  progressOverviewGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 20,
+    gap: 12,
+  },
+  progressOverviewCard: {
+    width: (width - 52) / 2,
+    backgroundColor: '#0f172a',
+    borderWidth: 1,
+    borderColor: '#1e293b',
+    borderLeftWidth: 3,
+    borderRadius: 16,
+    padding: 14,
+    gap: 10,
+  },
+  overviewCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  overviewCardLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  overviewCardValue: {
+    color: '#ffffff',
+    fontSize: 20,
+    fontWeight: '800',
+    lineHeight: 22,
+  },
+  overviewProgressBarOuter: {
     height: 4,
     backgroundColor: '#020617',
     borderRadius: 2,
-    marginTop: 4,
+    marginTop: 2,
     overflow: 'hidden',
   },
-  miniProgressBarInner: {
+  overviewProgressBarInner: {
     height: '100%',
-    backgroundColor: Colors.orange[400],
+    backgroundColor: Colors.emerald[500],
     borderRadius: 2,
   },
-  weakPointsAction: {
-    padding: 8,
+  /* Recent Quiz Activity vertical list styles */
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    marginTop: 20,
+    marginBottom: 12,
   },
-  /* Sections */
+  sectionActionText: {
+    color: Colors.emerald[400],
+    fontWeight: '600',
+  },
+  verticalRecentFeed: {
+    marginHorizontal: 20,
+    backgroundColor: '#0f172a',
+    borderWidth: 1,
+    borderColor: '#1e293b',
+    borderRadius: 18,
+    padding: 4,
+  },
+  recentFeedItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.03)',
+  },
+  feedItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  scoreCircleBg: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  feedItemName: {
+    color: '#ffffff',
+    fontSize: 13,
+  },
+  feedItemSubRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  feedItemSubText: {
+    color: '#64748b',
+    fontSize: 10,
+  },
+  feedItemRight: {
+    alignItems: 'flex-end',
+    paddingLeft: 10,
+  },
+  feedItemScoreText: {
+    fontSize: 16,
+    fontWeight: '800',
+    lineHeight: 18,
+  },
+  /* Shared standard components */
+  scrollContent: {
+    paddingBottom: 40,
+  },
   sectionHeader: {
     paddingHorizontal: 20,
-    marginTop: 10,
+    marginTop: 20,
     marginBottom: 12,
   },
   sectionTitle: {
     color: '#ffffff',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
   },
   emptyActivityCard: {
@@ -528,53 +714,19 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
     alignItems: 'center',
   },
-  /* Horizontal recent sessions list */
-  horizontalListContent: {
+  emptyActivityBtn: {
+    backgroundColor: Colors.emerald[500],
     paddingHorizontal: 20,
-    gap: 12,
-    paddingBottom: 4,
+    paddingVertical: 10,
+    borderRadius: 10,
+    marginTop: 4,
+    shadowColor: Colors.emerald[500],
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  recentSessionCard: {
-    width: 220,
-    backgroundColor: '#0f172a',
-    borderWidth: 1,
-    borderColor: '#1e293b',
-    borderRadius: 16,
-    padding: 14,
-    gap: 12,
-  },
-  recentSessionTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 8,
-  },
-  recentCategoryName: {
-    color: '#ffffff',
-    flex: 1,
-  },
-  scoreBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  scoreBadgeText: {
-    fontSize: 11,
-  },
-  recentSessionFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  recentSessionDate: {
-    color: '#64748b',
-    fontSize: 11,
-  },
-  recentSessionMode: {
-    color: '#64748b',
-    fontSize: 11,
-    marginLeft: 4,
-  },
-  /* Module list */
+  /* Module progress list */
   categoriesList: {
     paddingHorizontal: 20,
     gap: 12,

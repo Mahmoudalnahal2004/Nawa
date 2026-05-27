@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, Fragment } from 'react';
 import api from '@/lib/api';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
-import { Loader2, Plus, Pencil, Trash2, FolderTree, CornerDownRight, X, LayoutTemplate, Image as ImageIcon, Upload, Eye, EyeOff, ChevronRight, ChevronDown, AlertTriangle } from 'lucide-react';
+import { Loader2, Plus, Pencil, Trash2, FolderTree, CornerDownRight, X, LayoutTemplate, Image as ImageIcon, Upload, Eye, EyeOff, ChevronRight, ChevronDown, AlertTriangle, FolderPlus } from 'lucide-react';
 
 interface Category {
   id: number;
@@ -22,6 +22,16 @@ export default function AdminCategoriesPage() {
   const router = useRouter();
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  const countTotalQuestions = (cat: Category): number => {
+    let count = cat.question_count || 0;
+    if (cat.children && cat.children.length > 0) {
+      for (const child of cat.children) {
+        count += countTotalQuestions(child);
+      }
+    }
+    return count;
+  };
   
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -85,6 +95,18 @@ export default function AdminCategoriesPage() {
       defaultYear = yearFilter;
     }
     setFormData({ name: '', description: '', icon: '', parent_id: '', target_year: defaultYear });
+    setIsModalOpen(true);
+  };
+
+  const openAddSubcategoryModal = (parentCat: Category) => {
+    setEditingCategory(null);
+    setFormData({
+      name: '',
+      description: '',
+      icon: '',
+      parent_id: parentCat.id,
+      target_year: parentCat.target_year || '',
+    });
     setIsModalOpen(true);
   };
 
@@ -262,7 +284,7 @@ export default function AdminCategoriesPage() {
                         )}
                       </h3>
                       <p className="text-xs text-gray-400 mt-0.5">
-                        {module.description || 'No description provided'} • {(module.question_count || 0) + (module.children?.reduce((sum, child) => sum + (child.question_count || 0), 0) || 0)} Questions
+                        {module.description || 'No description provided'} • {countTotalQuestions(module)} Questions
                       </p>
                     </div>
                   </div>
@@ -272,6 +294,9 @@ export default function AdminCategoriesPage() {
                     </button>
                     <button onClick={() => router.push(`/admin/questions/new?categoryId=${module.id}`)} className="p-2 rounded-lg bg-white/5 hover:bg-emerald-500/20 text-gray-400 hover:text-emerald-400 transition-colors" title="Create Question">
                       <Plus className="w-4 h-4" />
+                    </button>
+                    <button onClick={() => openAddSubcategoryModal(module)} className="p-2 rounded-lg bg-white/5 hover:bg-emerald-500/20 text-gray-400 hover:text-emerald-400 transition-colors" title="Add Subcategory">
+                      <FolderPlus className="w-4 h-4" />
                     </button>
                     <button onClick={() => router.push(`/admin/questions?importCategoryId=${module.id}`)} className="p-2 rounded-lg bg-white/5 hover:bg-emerald-500/20 text-gray-400 hover:text-emerald-400 transition-colors" title="Import Questions">
                       <Upload className="w-4 h-4" />
@@ -312,7 +337,7 @@ export default function AdminCategoriesPage() {
                                 </span>
                               )}
                             </p>
-                            <p className="text-xs text-gray-500">{sub.description || 'No description'} • {(sub.question_count || 0) + (sub.children?.reduce((sum, child) => sum + (child.question_count || 0), 0) || 0)} Questions</p>
+                            <p className="text-xs text-gray-500">{sub.description || 'No description'} • {countTotalQuestions(sub)} Questions</p>
                           </div>
                         </div>
                         <div className="flex items-center gap-2 opacity-0 group-hover/sub:opacity-100 transition-opacity">
@@ -321,6 +346,9 @@ export default function AdminCategoriesPage() {
                           </button>
                           <button onClick={() => router.push(`/admin/questions/new?categoryId=${sub.id}`)} className="p-1.5 rounded-md bg-white/5 hover:bg-emerald-500/20 text-gray-400 hover:text-emerald-400 transition-colors" title="Create Question">
                             <Plus className="w-3.5 h-3.5" />
+                          </button>
+                          <button onClick={() => openAddSubcategoryModal(sub)} className="p-1.5 rounded-md bg-white/5 hover:bg-emerald-500/20 text-gray-400 hover:text-emerald-400 transition-colors" title="Add Topic/Subcategory">
+                            <FolderPlus className="w-3.5 h-3.5" />
                           </button>
                           <button onClick={() => router.push(`/admin/questions?importCategoryId=${sub.id}`)} className="p-1.5 rounded-md bg-white/5 hover:bg-emerald-500/20 text-gray-400 hover:text-emerald-400 transition-colors" title="Import Questions">
                             <Upload className="w-3.5 h-3.5" />
@@ -347,7 +375,7 @@ export default function AdminCategoriesPage() {
                                     {topic.target_year && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Year {topic.target_year}</span>}
                                     {!topic.is_active && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-400 border border-rose-500/20">Hidden</span>}
                                   </p>
-                                  <p className="text-xs text-gray-500">{topic.description || 'No description'} • {topic.question_count || 0} Questions</p>
+                                  <p className="text-xs text-gray-500">{topic.description || 'No description'} • {countTotalQuestions(topic)} Questions</p>
                                 </div>
                               </div>
                               <div className="flex items-center gap-2 opacity-0 group-hover/topic:opacity-100 transition-opacity">

@@ -1,8 +1,15 @@
 import { useEffect } from 'react';
 import { Slot, useRouter, useSegments } from 'expo-router';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useAuthStore } from '../store/auth-store';
 import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
-import { useColorScheme, ActivityIndicator, View, StatusBar } from 'react-native';
+import { useColorScheme, ActivityIndicator, View, StatusBar, LogBox } from 'react-native';
+
+// Silence internal library deprecation warnings from showing in simulator overlays
+LogBox.ignoreLogs([
+  'InteractionManager has been deprecated',
+  'SafeAreaView has been deprecated'
+]);
 
 export default function RootLayout() {
   const { isAuthenticated, isInitialized, checkSession } = useAuthStore();
@@ -48,12 +55,14 @@ export default function RootLayout() {
 
   // 4. Render Layout Shell
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <StatusBar 
-        barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} 
-        backgroundColor={colorScheme === 'dark' ? '#020617' : '#f8fafc'} 
-      />
-      <Slot />
-    </ThemeProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+        <StatusBar 
+          barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} 
+          backgroundColor={colorScheme === 'dark' ? '#020617' : '#f8fafc'} 
+        />
+        <Slot />
+      </ThemeProvider>
+    </GestureHandlerRootView>
   );
 }

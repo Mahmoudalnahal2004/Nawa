@@ -6,6 +6,7 @@ import api from '@/lib/api';
 import { toast } from 'sonner';
 import { Plus, Search, Filter, ChevronLeft, ChevronRight, ChevronDown, Eye, Trash2, Upload, Pencil } from 'lucide-react';
 import { BulkImportModal } from '@/components/admin/BulkImportModal';
+import { PdfImportPreviewModal } from '@/components/admin/PdfImportPreviewModal';
 
 interface Question {
   id: number;
@@ -27,6 +28,8 @@ export default function QuestionsPage() {
   const [yearFilter, setYearFilter] = useState('All');
   const [loading, setLoading] = useState(true);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isPdfPreviewOpen, setIsPdfPreviewOpen] = useState(false);
+  const [parsedQuestions, setParsedQuestions] = useState<any[]>([]);
   const [expandedMainCats, setExpandedMainCats] = useState<Record<string, boolean>>({});
   const [expandedSubCats, setExpandedSubCats] = useState<Record<string, boolean>>({});
   const [expandedTopics, setExpandedTopics] = useState<Record<string, boolean>>({});
@@ -320,7 +323,18 @@ export default function QuestionsPage() {
             router.replace('/admin/questions');
           }
         }} 
-        onSuccess={() => { setPage(1); loadQuestions(); }} 
+        onSuccess={() => { setPage(1); loadQuestions(); }}
+        onPdfParsed={(questions) => {
+          setParsedQuestions(questions);
+          setIsPdfPreviewOpen(true);
+        }}
+      />
+
+      <PdfImportPreviewModal
+        isOpen={isPdfPreviewOpen}
+        onClose={() => setIsPdfPreviewOpen(false)}
+        onSuccess={() => { setPage(1); loadQuestions(); }}
+        initialQuestions={parsedQuestions}
       />
     </div>
   );

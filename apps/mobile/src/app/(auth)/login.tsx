@@ -162,10 +162,14 @@ export default function LoginScreen() {
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       style={styles.keyboardContainer}
     >
-      <ScrollView contentContainerStyle={styles.scrollContainer} bounces={false}>
+      <ScrollView 
+        contentContainerStyle={styles.scrollContainer} 
+        bounces={false}
+        keyboardShouldPersistTaps="handled"
+      >
         {/* Background glow effects */}
         <View style={styles.radialGlowLeft} />
         <View style={styles.radialGlowRight} />
@@ -253,7 +257,7 @@ export default function LoginScreen() {
               <View style={styles.inputsWrapper}>
                 {/* Full Name (Registration only) */}
                 {!isLogin && (
-                  <View style={styles.inputContainer}>
+                  <View key="fullNameContainer" style={styles.inputContainer}>
                     <ThemedText style={styles.label} type="small">Full Name</ThemedText>
                     <View style={[
                       styles.inputWrapper,
@@ -275,7 +279,7 @@ export default function LoginScreen() {
 
                 {/* University and Study Year Row (Registration only) */}
                 {!isLogin && (
-                  <View style={styles.rowInputs}>
+                  <View key="uniYearContainer" style={styles.rowInputs}>
                     {/* University Picker */}
                     <View style={[styles.inputContainer, { flex: 1.2, marginRight: 8 }]}>
                       <ThemedText style={styles.label} type="small">University</ThemedText>
@@ -319,7 +323,7 @@ export default function LoginScreen() {
                 )}
 
                 {/* Email Address */}
-                <View style={styles.inputContainer}>
+                <View key="emailContainer" style={styles.inputContainer}>
                   <ThemedText style={styles.label} type="small">Email Address</ThemedText>
                   <View style={[
                     styles.inputWrapper,
@@ -341,7 +345,7 @@ export default function LoginScreen() {
                 </View>
 
                 {/* Password */}
-                <View style={styles.inputContainer}>
+                <View key="passwordContainer" style={styles.inputContainer}>
                   <ThemedText style={styles.label} type="small">Password</ThemedText>
                   <View style={[
                     styles.inputWrapper,
@@ -449,7 +453,7 @@ export default function LoginScreen() {
 
                 {/* Confirm Password (Registration only) */}
                 {!isLogin && (
-                  <View style={styles.inputContainer}>
+                  <View key="confirmPasswordContainer" style={styles.inputContainer}>
                     <ThemedText style={styles.label} type="small">Confirm Password</ThemedText>
                     <View style={[
                       styles.inputWrapper,
@@ -795,11 +799,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   focusedInput: {
-    borderColor: 'rgba(16, 185, 129, 0.5)',
-    shadowColor: Colors.emerald[500],
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    borderColor: 'rgba(16, 185, 129, 0.6)',
   },
   fieldIcon: {
     marginRight: 10,

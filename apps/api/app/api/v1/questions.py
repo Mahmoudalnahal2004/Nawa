@@ -112,6 +112,32 @@ async def import_questions_pdf(
     return {"message": "Import successful", "imported_count": imported_count}
 
 
+class BulkCreateQuestions(BaseModel):
+    questions: list[QuestionCreate]
+
+
+@router.post("/parse-pdf", dependencies=[Depends(admin_only)])
+async def parse_pdf(file: UploadFile = File(...)):
+    if not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only PDF files are accepted")
+    content = await file.read()
+    questions = await parse_pdf_questions(content, category_id=0)
+    return {"questions": questions}
+
+
+@router.post("/bulk-create", dependencies=[Depends(admin_only)])
+async def bulk_create_questions(data: BulkCreateQuestions, db: AsyncSession = Depends(get_db)):
+    imported_count = 0
+    errors = []
+    for i, q_data in enumerate(data.questions):
+        try:
+            await question_service.create_question(db, q_data)
+            imported_count += 1
+        except Exception as e:
+            errors.append({"index": i, "reason": str(e)})
+    return {"imported_count": imported_count, "errors": errors}
+
+
 @router.post("/upload-image", dependencies=[Depends(admin_only)])
 async def upload_image(file: UploadFile = File(...)):
     if not file.content_type.startswith("image/"):

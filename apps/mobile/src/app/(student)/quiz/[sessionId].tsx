@@ -10,7 +10,8 @@ import {
   Dimensions,
   Alert,
   Modal,
-  Platform
+  Platform,
+  TextInput
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
@@ -24,7 +25,12 @@ import {
   HelpCircle,
   Award,
   AlertTriangle,
-  Play
+  Play,
+  StickyNote,
+  Save,
+  Menu,
+  Layers,
+  Bookmark
 } from 'lucide-react-native';
 
 import { Colors } from '../../../constants/colors';
@@ -80,6 +86,18 @@ export default function QuizEngineScreen() {
   // Exit Modal
   const [exitModalVisible, setExitModalVisible] = useState(false);
 
+  // Layout Alignment - Question Navigator Sheet Modal
+  const [navigatorVisible, setNavigatorVisible] = useState(false);
+
+  // Layout Alignment - Bookmarking / Flagging
+  const [flaggedQuestions, setFlaggedQuestions] = useState<Record<number, boolean>>({});
+
+  // Layout Alignment - Personal Notes syncing
+  const [notesPanelOpen, setNotesPanelOpen] = useState(false);
+  const [currentNote, setCurrentNote] = useState('');
+  const [savingNote, setSavingNote] = useState(false);
+  const [loadingNote, setLoadingNote] = useState(false);
+
   // Results State (when exam is submitted)
   const [showResults, setShowResults] = useState(false);
   const [resultsData, setResultsData] = useState<{
@@ -132,6 +150,15 @@ export default function QuizEngineScreen() {
         setSelectedAnswers(savedAnswers);
         setAnsweredFeedbacks(savedFeedbacks);
         setHasCheckedAnswer(checkedMap);
+
+        // Layout Alignment - Restore bookmarked questions state on load
+        const savedFlags: Record<number, boolean> = {};
+        if (data.flagged_questions) {
+          for (const [k, v] of Object.entries(data.flagged_questions)) {
+            savedFlags[parseInt(k)] = v as boolean;
+          }
+        }
+        setFlaggedQuestions(savedFlags);
 
         // Setup timer if timed exam (e.g. 60 seconds per question)
         if (data.mode === 'exam' && data.status !== 'completed') {
@@ -208,7 +235,7 @@ export default function QuizEngineScreen() {
   };
 
   // 3. Option Selection Handler
-  const handleSelectOption = (optionKey: string) => {
+  const handleSelectOption = async (optionKey: string) => {
     const currentQuestion = questions[currentIndex];
     if (!currentQuestion) return;
 
@@ -221,6 +248,28 @@ export default function QuizEngineScreen() {
       ...prev,
       [currentQuestion.id]: optionKey
     }));
+
+    if (mode === 'practice') {
+      // In practice mode, immediately check the answer (replaces manual Check Answer step)
+      try {
+        const res = await api.post(`/quiz/${sessionId}/answer`, {
+          question_id: currentQuestion.id,
+          selected_answer: optionKey
+        });
+
+        setAnsweredFeedbacks(prev => ({
+          ...prev,
+          [currentQuestion.id]: res.data
+        }));
+
+        setHasCheckedAnswer(prev => ({
+          ...prev,
+          [currentQuestion.id]: true
+        }));
+      } catch (err) {
+        console.error('Failed to submit answer feedback:', err);
+      }
+    }
   };
 
   // 4. Submit Answer in Practice Mode (to get instant feedback)
@@ -330,6 +379,92 @@ export default function QuizEngineScreen() {
     router.replace('/(student)');
   };
 
+  // Early returns are moved below all hooks to satisfy React Rules of Hooks
+
+  const currentQuestion = questions[currentIndex];
+  const selectedOption = currentQuestion ? selectedAnswers[currentQuestion.id] : null;
+  const isChecked = currentQuestion ? hasCheckedAnswer[currentQuestion.id] : false;
+  const feedback = currentQuestion ? answeredFeedbacks[currentQuestion.id] : null;
+
+  // Layout Alignment - Fetch personal study notes for current clinical vignette
+  const fetchNote = async () => {
+    if (!currentQuestion) return;
+    setLoadingNote(true);
+    try {
+      const { data } = await api.get(`/notes/${currentQuestion.id}`);
+      setCurrentNote(data.content || '');
+    } catch (err: any) {
+      if (err.response?.status === 404) {
+        setCurrentNote('');
+      } else {
+        console.error('Failed to load study notes:', err);
+      }
+    } finally {
+      setLoadingNote(false);
+    }
+  };
+
+  // Layout Alignment - Save private notepad insights
+  const saveNote = async () => {
+    if (!currentQuestion) return;
+    setSavingNote(true);
+    try {
+      await api.post('/notes', {
+        question_id: currentQuestion.id,
+        content: currentNote.trim()
+      });
+      Alert.alert('Note Saved', 'Your personal study note has been successfully saved!');
+    } catch (err) {
+      console.error('Failed to save study notes:', err);
+      Alert.alert('Note Save Failed', 'Unable to synchronize your note with the server.');
+    } finally {
+      setSavingNote(false);
+    }
+  };
+
+  // Layout Alignment - Trigger notes update on question shift
+  useEffect(() => {
+    if (questions.length > 0 && currentQuestion) {
+      fetchNote();
+    }
+  }, [currentIndex, questions]);
+
+  // Layout Alignment - Toggle bookmark flag status
+  const toggleBookmark = async () => {
+    if (!currentQuestion) return;
+    const qId = currentQuestion.id;
+    const isCurrentlyFlagged = !!flaggedQuestions[qId];
+
+    // Optimistic UI updates
+    setFlaggedQuestions(prev => ({ ...prev, [qId]: !isCurrentlyFlagged }));
+
+    try {
+      if (isCurrentlyFlagged) {
+        await api.delete(`/bookmarks/${qId}`);
+        Alert.alert('Bookmark Removed', 'Question removed from your bookmarks list.');
+      } else {
+        await api.post(`/bookmarks/${qId}`);
+        Alert.alert('Question Bookmarked', 'Question added to your bookmarks successfully.');
+      }
+    } catch (err) {
+      // Rollback on API sync fail
+      setFlaggedQuestions(prev => ({ ...prev, [qId]: isCurrentlyFlagged }));
+      console.error('Bookmark sync failed:', err);
+      Alert.alert('Sync Error', 'Failed to synchronize bookmark status with the server.');
+    }
+  };
+
+  // Options parsing maps
+  const optionList = currentQuestion
+    ? [
+        { key: 'A', value: currentQuestion.option_a },
+        { key: 'B', value: currentQuestion.option_b },
+        { key: 'C', value: currentQuestion.option_c },
+        { key: 'D', value: currentQuestion.option_d },
+        ...(currentQuestion.option_e ? [{ key: 'E', value: currentQuestion.option_e }] : [])
+      ]
+    : [];
+
   if (loading) {
     return (
       <SafeAreaView style={styles.safeArea}>
@@ -358,22 +493,6 @@ export default function QuizEngineScreen() {
       </SafeAreaView>
     );
   }
-
-  const currentQuestion = questions[currentIndex];
-  const selectedOption = currentQuestion ? selectedAnswers[currentQuestion.id] : null;
-  const isChecked = currentQuestion ? hasCheckedAnswer[currentQuestion.id] : false;
-  const feedback = currentQuestion ? answeredFeedbacks[currentQuestion.id] : null;
-
-  // Options parsing maps
-  const optionList = currentQuestion
-    ? [
-        { key: 'A', value: currentQuestion.option_a },
-        { key: 'B', value: currentQuestion.option_b },
-        { key: 'C', value: currentQuestion.option_c },
-        { key: 'D', value: currentQuestion.option_d },
-        ...(currentQuestion.option_e ? [{ key: 'E', value: currentQuestion.option_e }] : [])
-      ]
-    : [];
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -439,13 +558,22 @@ export default function QuizEngineScreen() {
         <View style={{ flex: 1 }}>
           {/* Sticky Progress & Timer Header */}
           <View style={styles.topStickyHeader}>
-            <View style={styles.progressSection}>
-              <ThemedText style={styles.progressText} type="smallBold">
-                Question {currentIndex + 1} of {totalQuestions}
-              </ThemedText>
-              <ThemedText style={styles.categorySub} type="small">
-                {categoryName}
-              </ThemedText>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <TouchableOpacity
+                style={styles.navigatorToggleBtn}
+                onPress={() => setNavigatorVisible(true)}
+                activeOpacity={0.8}
+              >
+                <Menu color={Colors.emerald[400]} size={18} />
+              </TouchableOpacity>
+              <View style={styles.progressSection}>
+                <ThemedText style={styles.progressText} type="smallBold">
+                  Question {currentIndex + 1} of {totalQuestions}
+                </ThemedText>
+                <ThemedText style={styles.categorySub} type="small">
+                  {categoryName}
+                </ThemedText>
+              </View>
             </View>
 
             {/* Timer or Mode Badge */}
@@ -540,7 +668,7 @@ export default function QuizEngineScreen() {
                       >
                         {/* Radio selection circle indicator */}
                         <View style={radioCircle}>
-                          {isSelected && <View style={radioInner} />}
+                          {isSelected && !(mode === 'practice' && isChecked) && <View style={radioInner} />}
                           {mode === 'practice' && isChecked && isChoiceCorrect && (
                             <CheckCircle2 color="#ffffff" size={14} />
                           )}
@@ -563,58 +691,105 @@ export default function QuizEngineScreen() {
                   })}
                 </View>
 
-                {/* Practice Mode instant checker and explanation overlay */}
-                {mode === 'practice' && (
+                {/* Practice Mode instant explanation overlay */}
+                {mode === 'practice' && isChecked && (
                   <View style={styles.practiceFeedbackSection}>
-                    {!isChecked ? (
-                      <TouchableOpacity
-                        style={[
-                          styles.checkBtn,
-                          !selectedOption && { backgroundColor: '#1e293b', opacity: 0.5 }
-                        ]}
-                        disabled={!selectedOption}
-                        onPress={handleCheckAnswer}
-                      >
-                        <ThemedText style={{ color: '#ffffff' }} type="smallBold">Check Answer</ThemedText>
-                      </TouchableOpacity>
-                    ) : (
-                      /* Highlight Explanation Details */
-                      <View style={[
-                        styles.explanationCard,
-                        feedback?.is_correct ? styles.explanationCardCorrect : styles.explanationCardIncorrect
-                      ]}>
-                        <View style={styles.explanationHeader}>
-                          {feedback?.is_correct ? (
-                            <CheckCircle2 color={Colors.emerald[500]} size={20} />
-                          ) : (
-                            <XCircle color={Colors.rose[500]} size={20} />
-                          )}
-                          <ThemedText style={[
-                            styles.explanationTitle,
-                            { color: feedback?.is_correct ? Colors.emerald[400] : Colors.rose[500] }
-                          ]} type="smallBold">
-                            {feedback?.is_correct ? 'Correct Answer' : 'Incorrect Attempt'} (Key: {feedback?.correct_answer})
+                    {/* Highlight Explanation Details */}
+                    <View style={[
+                      styles.explanationCard,
+                      feedback?.is_correct ? styles.explanationCardCorrect : styles.explanationCardIncorrect
+                    ]}>
+                      <View style={styles.explanationHeader}>
+                        {feedback?.is_correct ? (
+                          <CheckCircle2 color={Colors.emerald[500]} size={20} />
+                        ) : (
+                          <XCircle color={Colors.rose[500]} size={20} />
+                        )}
+                        <ThemedText style={[
+                          styles.explanationTitle,
+                          { color: feedback?.is_correct ? Colors.emerald[400] : Colors.rose[500] }
+                        ]} type="smallBold">
+                          {feedback?.is_correct ? 'Correct Answer' : 'Incorrect Attempt'} (Key: {feedback?.correct_answer})
+                        </ThemedText>
+                      </View>
+
+                      {feedback?.explanation && (
+                        <View style={styles.explanationBody}>
+                          <ThemedText style={styles.explanationHeading} type="smallBold">Explanation:</ThemedText>
+                          <ThemedText style={styles.explanationText} type="default">
+                            {feedback.explanation}
                           </ThemedText>
                         </View>
-
-                        {feedback?.explanation && (
-                          <View style={styles.explanationBody}>
-                            <ThemedText style={styles.explanationHeading} type="smallBold">Explanation:</ThemedText>
-                            <ThemedText style={styles.explanationText} type="default">
-                              {feedback.explanation}
-                            </ThemedText>
-                          </View>
-                        )}
-                      </View>
-                    )}
+                      )}
+                    </View>
                   </View>
                 )}
+
+                {/* Personal Notes Card */}
+                <View style={styles.notesContainer}>
+                  <TouchableOpacity
+                    style={styles.notesHeaderToggle}
+                    onPress={() => setNotesPanelOpen(!notesPanelOpen)}
+                    activeOpacity={0.8}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <StickyNote color={Colors.emerald[400]} size={16} />
+                      <ThemedText style={{ color: '#ffffff' }} type="smallBold">My Personal Notes</ThemedText>
+                    </View>
+                    {loadingNote ? (
+                      <ActivityIndicator size="small" color={Colors.emerald[500]} />
+                    ) : (
+                      <ChevronRight color="#64748b" size={16} style={{ transform: [{ rotate: notesPanelOpen ? '90deg' : '0deg' }] }} />
+                    )}
+                  </TouchableOpacity>
+                  
+                  {notesPanelOpen && (
+                    <View style={styles.notesExpandedBody}>
+                      <TextInput
+                        style={styles.notesTextInput}
+                        multiline
+                        placeholder="Jot down high-yield facts, key memory hooks or custom review notes..."
+                        placeholderTextColor="#475569"
+                        value={currentNote}
+                        onChangeText={setCurrentNote}
+                      />
+                      <TouchableOpacity
+                        style={[styles.saveNoteBtn, savingNote && { opacity: 0.7 }]}
+                        disabled={savingNote}
+                        onPress={saveNote}
+                        activeOpacity={0.85}
+                      >
+                        {savingNote ? (
+                          <ActivityIndicator size="small" color="#ffffff" />
+                        ) : (
+                          <>
+                            <Save color="#ffffff" size={14} />
+                            <ThemedText style={{ color: '#ffffff' }} type="smallBold">Save Note</ThemedText>
+                          </>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
               </View>
             )}
           </ScrollView>
 
           {/* Sticky footer action navigation bar */}
           <View style={styles.bottomStickyActionBg}>
+            {/* Layout Alignment - Bookmark Question button shortcut */}
+            <TouchableOpacity
+              style={[styles.bookmarkBtn, !!flaggedQuestions[currentQuestion?.id] && styles.bookmarkBtnActive]}
+              onPress={toggleBookmark}
+              activeOpacity={0.8}
+            >
+              <Bookmark
+                color={!!flaggedQuestions[currentQuestion?.id] ? Colors.orange[400] : '#94a3b8'}
+                size={18}
+                fill={!!flaggedQuestions[currentQuestion?.id] ? Colors.orange[400] : 'transparent'}
+              />
+            </TouchableOpacity>
+
             <TouchableOpacity
               style={[styles.navBtn, currentIndex === 0 && { opacity: 0.3 }]}
               disabled={currentIndex === 0}
@@ -655,6 +830,78 @@ export default function QuizEngineScreen() {
           </View>
         </View>
       )}
+
+      {/* Slide-Up Question Navigator Drawer Sheet Modal */}
+      <Modal
+        visible={navigatorVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setNavigatorVisible(false)}
+      >
+        <View style={styles.navigatorOverlay}>
+          <View style={styles.navigatorContent}>
+            <View style={styles.navigatorHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Layers color={Colors.emerald[400]} size={18} />
+                <ThemedText style={styles.navigatorTitle} type="smallBold">Question Navigator</ThemedText>
+              </View>
+              <TouchableOpacity
+                style={styles.navigatorCloseBtn}
+                onPress={() => setNavigatorVisible(false)}
+              >
+                <XCircle color={Colors.rose[500]} size={20} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.navigatorGridScroll} bounces={false}>
+              <View style={styles.navigatorGrid}>
+                {questions.map((q, idx) => {
+                  const isActive = currentIndex === idx;
+                  const isFlagged = !!flaggedQuestions[q.id];
+                  const examAns = selectedAnswers[q.id];
+                  const practFb = answeredFeedbacks[q.id];
+
+                  let circleStyle: any = styles.navigatorGridCircle;
+                  let textStyle: any = styles.navigatorGridText;
+
+                  if (isActive) {
+                    circleStyle = [circleStyle, { borderColor: '#ffffff', backgroundColor: '#020617' }];
+                    textStyle = [textStyle, { color: '#ffffff', fontWeight: '800' }];
+                  } else if (mode === 'exam' && examAns) {
+                    circleStyle = [circleStyle, { backgroundColor: 'rgba(59, 130, 246, 0.15)', borderColor: 'rgba(59, 130, 246, 0.3)' }];
+                    textStyle = [textStyle, { color: '#3b82f6', fontWeight: '700' }];
+                  } else if (mode === 'practice' && practFb) {
+                    if (practFb.is_correct) {
+                      circleStyle = [circleStyle, { backgroundColor: 'rgba(16, 185, 129, 0.15)', borderColor: 'rgba(16, 185, 129, 0.3)' }];
+                      textStyle = [textStyle, { color: Colors.emerald[400], fontWeight: '700' }];
+                    } else {
+                      circleStyle = [circleStyle, { backgroundColor: 'rgba(244, 63, 94, 0.15)', borderColor: 'rgba(244, 63, 94, 0.3)' }];
+                      textStyle = [textStyle, { color: Colors.rose[500], fontWeight: '700' }];
+                    }
+                  } else {
+                    circleStyle = [circleStyle, { backgroundColor: '#020617', borderColor: '#1e293b' }];
+                  }
+
+                  return (
+                    <TouchableOpacity
+                      key={q.id}
+                      style={circleStyle}
+                      onPress={() => {
+                        setNavigatorVisible(false);
+                        setCurrentIndex(idx);
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      <ThemedText style={textStyle} type="small">{idx + 1}</ThemedText>
+                      {isFlagged && <View style={styles.navigatorBookmarkRibbon} />}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
       {/* Exit Alert Dialog Overlay Modal */}
       <Modal
@@ -1171,5 +1418,144 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 8,
     elevation: 4,
+  },
+  /* Bookmark button in bottom bar */
+  bookmarkBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#0f172a',
+    borderWidth: 1,
+    borderColor: '#1e293b',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 6,
+  },
+  bookmarkBtnActive: {
+    borderColor: 'rgba(251, 146, 60, 0.3)',
+    backgroundColor: 'rgba(251, 146, 60, 0.05)',
+  },
+  /* Navigator Header Action */
+  navigatorToggleBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: 'rgba(16, 185, 129, 0.08)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  /* Navigator Modal Sheet overlay */
+  navigatorOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(2, 6, 23, 0.75)',
+    justifyContent: 'flex-end',
+  },
+  navigatorContent: {
+    backgroundColor: '#0f172a',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderWidth: 1,
+    borderColor: '#1e293b',
+    borderBottomWidth: 0,
+    padding: 22,
+    maxHeight: '75%',
+    gap: 18,
+  },
+  navigatorHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
+    paddingBottom: 12,
+  },
+  navigatorTitle: {
+    color: '#ffffff',
+    fontSize: 16,
+  },
+  navigatorCloseBtn: {
+    padding: 4,
+  },
+  navigatorGridScroll: {
+    marginVertical: 10,
+  },
+  navigatorGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    justifyContent: 'flex-start',
+    paddingBottom: 20,
+  },
+  navigatorGridCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+    position: 'relative',
+  },
+  navigatorGridText: {
+    color: '#cbd5e1',
+  },
+  navigatorBookmarkRibbon: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    backgroundColor: Colors.orange[400],
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    borderWidth: 1.5,
+    borderColor: '#0f172a',
+  },
+  /* Notes Box layout styles */
+  notesContainer: {
+    backgroundColor: '#0f172a',
+    borderWidth: 1,
+    borderColor: '#1e293b',
+    borderRadius: 16,
+    marginTop: 18,
+    overflow: 'hidden',
+  },
+  notesHeaderToggle: {
+    padding: 14,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  notesExpandedBody: {
+    paddingHorizontal: 14,
+    paddingBottom: 14,
+    gap: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.03)',
+    paddingTop: 12,
+  },
+  notesTextInput: {
+    color: '#ffffff',
+    fontSize: 13,
+    backgroundColor: '#020617',
+    borderWidth: 1,
+    borderColor: '#1e293b',
+    borderRadius: 10,
+    height: 100,
+    padding: 12,
+    textAlignVertical: 'top',
+  },
+  saveNoteBtn: {
+    backgroundColor: Colors.emerald[500],
+    borderRadius: 10,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+    shadowColor: Colors.emerald[500],
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+    elevation: 2,
   },
 });

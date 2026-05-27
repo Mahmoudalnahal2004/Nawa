@@ -50,7 +50,30 @@ async def start_quiz(db: AsyncSession, user_id: int, category_id: int, num_quest
     if user_loaded.role == UserRole.STUDENT:
         if not user_loaded.quota_id or not user_loaded.quota:
             raise HTTPException(status_code=403, detail="No quota assigned. Access denied.")
-        allowed_category_ids = [cat.id for cat in user_loaded.quota.categories]
+            
+        # Get all categories from database to build parent-to-child map for descendant resolution
+        result_cats = await db.execute(select(Category.id, Category.parent_id))
+        all_cats = result_cats.all()
+        
+        parent_map = {}
+        for row in all_cats:
+            c_id, p_id = row[0], row[1]
+            if p_id is not None:
+                if p_id not in parent_map:
+                    parent_map[p_id] = []
+                parent_map[p_id].append(c_id)
+                
+        # Traverse downwards from quota categories to collect all descendant IDs
+        allowed = set()
+        stack = [cat.id for cat in user_loaded.quota.categories]
+        while stack:
+            curr = stack.pop()
+            if curr not in allowed:
+                allowed.add(curr)
+                if curr in parent_map:
+                    stack.extend(parent_map[curr])
+                    
+        allowed_category_ids = list(allowed)
         if category_id not in allowed_category_ids:
             raise HTTPException(status_code=403, detail="This category is not in your assigned quota.")
 
@@ -376,7 +399,30 @@ async def generate_custom_quiz(db: AsyncSession, user_id: int, request) -> QuizS
     if user_loaded.role == UserRole.STUDENT:
         if not user_loaded.quota_id or not user_loaded.quota:
             raise HTTPException(status_code=403, detail="No quota assigned. Access denied.")
-        allowed_category_ids = [cat.id for cat in user_loaded.quota.categories]
+            
+        # Get all categories from database to build parent-to-child map for descendant resolution
+        result_cats = await db.execute(select(Category.id, Category.parent_id))
+        all_cats = result_cats.all()
+        
+        parent_map = {}
+        for row in all_cats:
+            c_id, p_id = row[0], row[1]
+            if p_id is not None:
+                if p_id not in parent_map:
+                    parent_map[p_id] = []
+                parent_map[p_id].append(c_id)
+                
+        # Traverse downwards from quota categories to collect all descendant IDs
+        allowed = set()
+        stack = [cat.id for cat in user_loaded.quota.categories]
+        while stack:
+            curr = stack.pop()
+            if curr not in allowed:
+                allowed.add(curr)
+                if curr in parent_map:
+                    stack.extend(parent_map[curr])
+                    
+        allowed_category_ids = list(allowed)
         for req_cat_id in request.category_ids:
             if req_cat_id not in allowed_category_ids:
                 raise HTTPException(status_code=403, detail=f"Category {req_cat_id} is not in your assigned quota.")
