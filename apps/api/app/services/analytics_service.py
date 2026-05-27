@@ -38,19 +38,31 @@ async def get_user_overall_rank(db: AsyncSession, target_user_id: int, target_ye
     q_cat_map = {q.id: q.category_id for q in (await db.execute(select(Question.id, Question.category_id))).all()}
 
     user_stats = {}
-    sessions_result = await db.execute(select(QuizSession))
+    sessions_result = await db.execute(select(QuizSession).order_by(QuizSession.created_at.asc()))
+    
+    # Store unique question answers per user: user_id -> question_id -> {"is_correct": bool, "cat_id": int}
+    user_latest_attempts = {}
     for s in sessions_result.scalars().all():
         uid = s.user_id
-        if uid not in user_stats:
-            user_stats[uid] = {"total": 0, "correct": 0}
+        if uid not in user_latest_attempts:
+            user_latest_attempts[uid] = {}
         for ans in s.answers:
             qid = ans.get("question_id")
-            cat_id = q_cat_map.get(qid)
+            if qid is not None:
+                user_latest_attempts[uid][qid] = {
+                    "is_correct": bool(ans.get("is_correct")),
+                    "cat_id": q_cat_map.get(qid)
+                }
+
+    for uid, attempts in user_latest_attempts.items():
+        user_stats[uid] = {"total": 0, "correct": 0}
+        for qid, attempt in attempts.items():
+            cat_id = attempt["cat_id"]
             if cat_id is not None:
                 top_parent_id = get_top_parent(cat_id)
                 if top_parent_id in top_categories:
                     user_stats[uid]["total"] += 1
-                    if ans.get("is_correct"):
+                    if attempt["is_correct"]:
                         user_stats[uid]["correct"] += 1
                 
     if target_user_id not in user_stats or user_stats[target_user_id]["total"] == 0:
@@ -130,24 +142,39 @@ async def get_category_progress(db: AsyncSession, user_id: int, target_year: int
                 top_categories[top_parent_id]["total_questions"] += 1
 
     # 3. Process quiz sessions to get answered/correct counts
-    sessions_result = await db.execute(select(QuizSession).where(QuizSession.user_id == user_id))
+    sessions_result = await db.execute(
+        select(QuizSession)
+        .where(QuizSession.user_id == user_id)
+        .order_by(QuizSession.created_at.asc())
+    )
+    
+    # Store the latest attempt's results for each unique question_id
+    # format: qid -> {"is_correct": bool, "cat_id": int}
+    latest_attempts = {}
     for s in sessions_result.scalars().all():
         for ans in s.answers:
             qid = ans.get("question_id")
-            cat_id = q_cat_map.get(qid)
-            if cat_id is not None:
-                top_parent_id = get_top_parent(cat_id)
-                if top_parent_id in top_categories:
-                    top_categories[top_parent_id]["answered"] += 1
-                    if ans.get("is_correct"):
-                        top_categories[top_parent_id]["correct"] += 1
-                        
-                    if cat_id != top_parent_id:
-                        if cat_id not in top_categories[top_parent_id]["sub_stats"]:
-                            top_categories[top_parent_id]["sub_stats"][cat_id] = {"answered": 0, "correct": 0}
-                        top_categories[top_parent_id]["sub_stats"][cat_id]["answered"] += 1
-                        if ans.get("is_correct"):
-                            top_categories[top_parent_id]["sub_stats"][cat_id]["correct"] += 1
+            if qid is not None:
+                latest_attempts[qid] = {
+                    "is_correct": bool(ans.get("is_correct")),
+                    "cat_id": q_cat_map.get(qid)
+                }
+
+    for qid, attempt in latest_attempts.items():
+        cat_id = attempt["cat_id"]
+        if cat_id is not None:
+            top_parent_id = get_top_parent(cat_id)
+            if top_parent_id in top_categories:
+                top_categories[top_parent_id]["answered"] += 1
+                if attempt["is_correct"]:
+                    top_categories[top_parent_id]["correct"] += 1
+                    
+                if cat_id != top_parent_id:
+                    if cat_id not in top_categories[top_parent_id]["sub_stats"]:
+                        top_categories[top_parent_id]["sub_stats"][cat_id] = {"answered": 0, "correct": 0}
+                    top_categories[top_parent_id]["sub_stats"][cat_id]["answered"] += 1
+                    if attempt["is_correct"]:
+                        top_categories[top_parent_id]["sub_stats"][cat_id]["correct"] += 1
 
     cat_names = {r.id: r.name for r in all_cats}
 
@@ -187,19 +214,27 @@ async def get_category_progress(db: AsyncSession, user_id: int, target_year: int
 
 
 async def get_weak_points(db: AsyncSession, user_id: int, target_year: int | None = None, university: str | None = None) -> List[WeakPointQuestion]:
+    latest_is_correct = {}
     wrong_counts = {}
     last_attempt = {}
     
-    sessions_result = await db.execute(select(QuizSession).where(QuizSession.user_id == user_id).order_by(QuizSession.created_at.asc()))
+    sessions_result = await db.execute(
+        select(QuizSession)
+        .where(QuizSession.user_id == user_id)
+        .order_by(QuizSession.created_at.asc())
+    )
     
     for s in sessions_result.scalars().all():
         for ans in s.answers:
             qid = ans.get("question_id")
-            if not ans.get("is_correct"):
-                wrong_counts[qid] = wrong_counts.get(qid, 0) + 1
+            if qid is not None:
+                is_correct = bool(ans.get("is_correct"))
+                latest_is_correct[qid] = is_correct
                 last_attempt[qid] = s.created_at
+                if not is_correct:
+                    wrong_counts[qid] = wrong_counts.get(qid, 0) + 1
                     
-    weak_qids = list(wrong_counts.keys())
+    weak_qids = [qid for qid, correct in latest_is_correct.items() if not correct]
     
     if not weak_qids:
         return []
@@ -251,17 +286,24 @@ async def get_leaderboard(db: AsyncSession, category_id: int) -> List[Leaderboar
         questions_result = await db.execute(select(Question.id).where(Question.category_id == category_id))
         cat_qids = {r.id for r in questions_result.all()}
     
-    user_stats = {}
-    sessions_result = await db.execute(select(QuizSession))
+    user_latest_attempts = {}
+    sessions_result = await db.execute(select(QuizSession).order_by(QuizSession.created_at.asc()))
     for s in sessions_result.scalars().all():
         uid = s.user_id
-        if uid not in user_stats:
-            user_stats[uid] = {"total": 0, "correct": 0}
-            
+        if uid not in user_latest_attempts:
+            user_latest_attempts[uid] = {}
         for ans in s.answers:
-            if cat_qids is None or ans.get("question_id") in cat_qids:
+            qid = ans.get("question_id")
+            if qid is not None:
+                user_latest_attempts[uid][qid] = bool(ans.get("is_correct"))
+                
+    user_stats = {}
+    for uid, attempts in user_latest_attempts.items():
+        user_stats[uid] = {"total": 0, "correct": 0}
+        for qid, is_correct in attempts.items():
+            if cat_qids is None or qid in cat_qids:
                 user_stats[uid]["total"] += 1
-                if ans.get("is_correct"):
+                if is_correct:
                     user_stats[uid]["correct"] += 1
                     
     valid_uids = [uid for uid, stats in user_stats.items() if stats["total"] > 0]

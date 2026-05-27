@@ -48,7 +48,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     <div className="min-h-screen bg-navy-950 flex">
       {/* Sidebar */}
       <aside
-        className={`fixed lg:static inset-y-0 left-0 z-50 w-72 bg-navy-900/80 backdrop-blur-xl border-r border-white/5
+        className={`fixed inset-y-0 left-0 z-50 w-72 h-screen bg-navy-900/80 backdrop-blur-xl border-r border-white/5
           transform transition-transform duration-300 ease-out
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
       >
@@ -116,7 +116,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       )}
 
       {/* Main */}
-      <div className="flex-1 flex flex-col min-h-screen">
+      <div className="flex-1 flex flex-col min-h-screen lg:ml-72">
         {/* Top bar */}
         <header className="sticky top-0 z-30 bg-navy-950/80 backdrop-blur-xl border-b border-white/5 px-6 py-4">
           <div className="flex items-center gap-4">

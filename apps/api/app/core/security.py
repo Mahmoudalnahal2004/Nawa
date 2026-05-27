@@ -48,3 +48,24 @@ def decode_token(token: str) -> Optional[dict]:
         return payload
     except JWTError:
         return None
+
+
+def create_verification_token(email: str) -> str:
+    """Create a JWT verification token that expires in 24 hours."""
+    to_encode = {"sub": email}
+    expire = datetime.now(timezone.utc) + timedelta(hours=24)
+    to_encode.update({"exp": expire, "type": "verification"})
+    return jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+
+
+def verify_verification_token(token: str) -> str | None:
+    """Decode the verification token and return the email if valid, or None if expired/invalid."""
+    try:
+        payload = jwt.decode(
+            token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM]
+        )
+        if payload.get("type") != "verification":
+            return None
+        return payload.get("sub")
+    except JWTError:
+        return None

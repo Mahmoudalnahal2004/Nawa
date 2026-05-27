@@ -24,7 +24,7 @@ class User(Base):
         nullable=False,
         default=UserRole.STUDENT,
     )
-    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     university: Mapped[str | None] = mapped_column(String(255), nullable=True, default=None)
     study_year: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
     current_streak: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

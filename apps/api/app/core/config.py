@@ -34,6 +34,13 @@ class Settings(BaseSettings):
     SUPER_ADMIN_EMAIL: str = "admin@nawa.com"
     SUPER_ADMIN_PASSWORD: str = "Admin123!"
 
+    # Email / Verification
+    SMTP_SERVER: str | None = None
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str | None = None
+    SMTP_PASSWORD: str | None = None
+    FRONTEND_URL: str = "http://localhost:3200"
+
     class Config:
         env_file = ".env"
         case_sensitive = True

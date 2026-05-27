@@ -1,9 +1,10 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import hash_password, verify_password, create_access_token, create_refresh_token
+from app.core.security import hash_password, verify_password, create_access_token, create_refresh_token, create_verification_token
 from app.models.user import User, UserRole
 from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserResponse
+from app.services.email_service import send_verification_email
 
 
 async def authenticate_user(db: AsyncSession, login_data: LoginRequest) -> User | None:
@@ -23,7 +24,7 @@ async def create_user(
     password: str,
     full_name: str,
     role: UserRole = UserRole.STUDENT,
-    is_active: bool = True,
+    is_active: bool = False,
     university: str | None = None,
     study_year: int | None = None,
 ) -> User:
@@ -46,8 +47,12 @@ async def create_user(
             user.quota_id = default_quota.id
 
     db.add(user)
-    await db.flush()
+    await db.commit()
     await db.refresh(user)
+
+    token = create_verification_token(user.email)
+    await send_verification_email(user.email, token)
+
     return user
 
 

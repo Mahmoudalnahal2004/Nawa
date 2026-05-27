@@ -91,3 +91,26 @@ async def change_password(
     if not success:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Incorrect current password")
     return {"detail": "Password changed successfully"}
+
+
+@router.delete("/{user_id}", dependencies=[Depends(admin_only)])
+async def delete_user_account(
+    user_id: int, 
+    pin: str, 
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete a user account after validating the PIN."""
+    if pin != "0000":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Incorrect deletion PIN")
+    
+    if current_user.id == user_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You cannot delete your own account")
+        
+    success = await user_service.delete_user(db, user_id)
+    if not success:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found or cannot be deleted")
+        
+    return {"detail": "User deleted successfully"}
+
+

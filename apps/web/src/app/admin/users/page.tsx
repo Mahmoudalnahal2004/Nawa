@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import { toast } from 'sonner';
-import { Users, Shield, ShieldOff, Mail, Calendar, Search, Crown } from 'lucide-react';
+import { Users, Shield, ShieldOff, Mail, Calendar, Search, Crown, Trash2 } from 'lucide-react';
+import { getStoredUser } from '@/lib/auth';
 
 interface User {
   id: number;
@@ -32,8 +33,14 @@ export default function UsersPage() {
   const [editingQuotaUser, setEditingQuotaUser] = useState<User | null>(null);
   const [selectedQuotaId, setSelectedQuotaId] = useState<number | ''>('');
   const [quotas, setQuotas] = useState<Quota[]>([]);
+  const [deletingUser, setDeletingUser] = useState<User | null>(null);
+  const [deletePin, setDeletePin] = useState<string[]>(['', '', '', '']);
+  const [currentUser, setCurrentUser] = useState<any>(null);
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => {
+    setCurrentUser(getStoredUser());
+    loadData();
+  }, []);
 
   const loadData = async () => {
     try {
@@ -84,6 +91,60 @@ export default function UsersPage() {
       loadData();
     } catch { toast.error('Failed to update quota'); }
   };
+
+  const handlePinChange = (index: number, value: string) => {
+    if (value && !/^\d$/.test(value)) return;
+
+    const newPin = [...deletePin];
+    newPin[index] = value;
+    setDeletePin(newPin);
+
+    // Auto-focus next input
+    if (value && index < 3) {
+      const nextInput = document.getElementById(`pin-input-${index + 1}`);
+      if (nextInput) nextInput.focus();
+    }
+  };
+
+  const handlePinKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Backspace') {
+      if (!deletePin[index] && index > 0) {
+        const prevInput = document.getElementById(`pin-input-${index - 1}`);
+        if (prevInput) {
+          prevInput.focus();
+          const newPin = [...deletePin];
+          newPin[index - 1] = '';
+          setDeletePin(newPin);
+        }
+      } else {
+        const newPin = [...deletePin];
+        newPin[index] = '';
+        setDeletePin(newPin);
+      }
+    }
+  };
+
+  const confirmDeletion = async () => {
+    if (!deletingUser) return;
+    const pinString = deletePin.join('');
+    if (pinString !== '0000') {
+      toast.error('Incorrect confirmation PIN');
+      return;
+    }
+    try {
+      await api.delete(`/users/${deletingUser.id}`, {
+        params: { pin: pinString }
+      });
+      toast.success('User account deleted successfully');
+      setDeletingUser(null);
+      setDeletePin(['', '', '', '']);
+      loadData();
+    } catch {
+      toast.error('Failed to delete user');
+    }
+  };
+
+
 
   const filteredUsers = users.filter(u => 
     (u.full_name || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -203,6 +264,16 @@ export default function UsersPage() {
                       >
                         <Shield className="w-3.5 h-3.5" />
                         Quota
+                      </button>
+                    )}
+                    {u.email !== 'admin@nawa.com' && u.id !== currentUser?.id && (
+                      <button
+                        onClick={() => { setDeletingUser(u); setDeletePin(['', '', '', '']); }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all bg-rose-500/10 text-rose-400 hover:bg-rose-500/20"
+                        title="Delete Account"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Delete
                       </button>
                     )}
                   </div>
@@ -359,6 +430,73 @@ export default function UsersPage() {
                 className="px-5 py-2.5 rounded-xl text-sm font-medium bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-500/20 transition-all"
               >
                 Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deletingUser && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-slate-800 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-rose-500/20 flex items-center justify-center shrink-0">
+                  <Trash2 className="w-5 h-5 text-rose-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white">Delete User Account</h3>
+                  <p className="text-sm text-gray-400">Permanently delete {deletingUser.full_name}</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="p-6 space-y-6">
+              <p className="text-gray-300 text-sm leading-relaxed text-center">
+                This action is <span className="text-rose-400 font-semibold">permanent</span> and will completely delete the account for <span className="text-white font-semibold">{deletingUser.full_name}</span> (<span className="text-white">{deletingUser.email}</span>). All associated progress, bookmarks, notes, and quiz sessions will be lost forever.
+              </p>
+              
+              <div className="flex flex-col items-center">
+                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 text-center w-full">
+                  Enter Admin Deletion PIN
+                </label>
+                <div className="flex gap-3 justify-center">
+                  {[0, 1, 2, 3].map((index) => (
+                    <input
+                      key={index}
+                      id={`pin-input-${index}`}
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={1}
+                      value={deletePin[index]}
+                      onChange={(e) => handlePinChange(index, e.target.value)}
+                      onKeyDown={(e) => handlePinKeyDown(index, e)}
+                      className="w-12 h-12 text-center text-xl font-bold bg-slate-950 border border-slate-850 rounded-xl text-white focus:border-rose-500/50 focus:ring-1 focus:ring-rose-500/50 focus:outline-none transition-all"
+                      autoComplete="off"
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+            
+            <div className="p-6 border-t border-slate-800 shrink-0 flex justify-end gap-3 bg-slate-900/50">
+              <button
+                onClick={() => { setDeletingUser(null); setDeletePin(['', '', '', '']); }}
+                className="px-4 py-2.5 rounded-xl text-sm font-medium text-gray-300 hover:bg-slate-800 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeletion}
+                disabled={deletePin.join('') !== '0000'}
+                className={`px-5 py-2.5 rounded-xl text-sm font-medium text-white shadow-lg transition-all flex items-center gap-2
+                  ${deletePin.join('') === '0000'
+                    ? 'bg-rose-500 hover:bg-rose-600 shadow-rose-500/20 cursor-pointer'
+                    : 'bg-rose-950/40 text-gray-500 border border-rose-900/20 cursor-not-allowed'
+                  }`}
+              >
+                <Trash2 className="w-4 h-4" />
+                Permanently Delete
               </button>
             </div>
           </div>

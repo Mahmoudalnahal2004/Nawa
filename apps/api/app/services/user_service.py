@@ -112,3 +112,36 @@ async def get_student_count(db: AsyncSession) -> int:
         )
     )
     return result.scalar_one()
+
+
+async def delete_user(db: AsyncSession, user_id: int) -> bool:
+    """Delete a user account and all of their related dependent records."""
+    from app.models.user import User
+    from app.models.quiz_session import QuizSession
+    from app.models.bookmark import Bookmark
+    from app.models.note import Note
+    from app.models.user_progress import UserProgress
+    from sqlalchemy import delete
+
+    # 1. Fetch user to verify they exist
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if user is None:
+        return False
+
+    # 2. Check if we are trying to delete the super admin
+    from app.core.config import settings
+    if user.email == settings.SUPER_ADMIN_EMAIL:
+        return False
+
+    # 3. Clean up dependent tables manually to prevent SQLite constraint failures
+    await db.execute(delete(QuizSession).where(QuizSession.user_id == user_id))
+    await db.execute(delete(Bookmark).where(Bookmark.user_id == user_id))
+    await db.execute(delete(Note).where(Note.user_id == user_id))
+    await db.execute(delete(UserProgress).where(UserProgress.user_id == user_id))
+
+    # 4. Delete user
+    await db.execute(delete(User).where(User.id == user_id))
+    await db.flush()
+    return True
+
