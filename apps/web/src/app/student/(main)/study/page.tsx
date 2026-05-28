@@ -122,7 +122,7 @@ export default function StudyHubPage() {
                       isExpanded ? 'bg-emerald-500/20' : 'bg-slate-800 group-hover:bg-slate-700'
                     }`}>
                       {category.icon && category.icon.startsWith('/') ? (
-                        <img src={`http://localhost:8000${category.icon}`} alt={category.name} className="w-6 h-6 object-contain" />
+                        <img src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}${category.icon}`} alt={category.name} className="w-6 h-6 object-contain" />
                       ) : (
                         <span className="text-2xl">{category.icon || '📚'}</span>
                       )}
@@ -150,7 +150,7 @@ export default function StudyHubPage() {
                         {categoryMaterials.map(mat => (
                           <a 
                             key={mat.id} 
-                            href={`http://localhost:8000${mat.file_url}`}
+                            href={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}${mat.file_url}`}
                             target="_blank" 
                             rel="noreferrer"
                             className="flex items-center justify-between p-4 rounded-xl bg-slate-800/80 border border-slate-700 hover:border-emerald-500/40 hover:bg-slate-800 transition-all group"

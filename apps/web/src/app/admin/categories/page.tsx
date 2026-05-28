@@ -115,7 +115,7 @@ export default function AdminCategoriesPage() {
           <div className="flex items-center gap-4">
             <div className={`w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center border border-blue-500/20 overflow-hidden text-2xl ${!module.is_active ? 'opacity-40 grayscale' : ''}`}>
               {module.icon?.startsWith('/') ? (
-                <img src={`http://localhost:8000${module.icon}`} alt={module.name} className="w-full h-full object-cover" />
+                <img src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}${module.icon}`} alt={module.name} className="w-full h-full object-cover" />
               ) : (
                 module.icon || <ImageIcon className="w-5 h-5 text-blue-400" />
               )}
@@ -615,7 +615,7 @@ export default function AdminCategoriesPage() {
                   <div className="relative w-full h-10 bg-slate-950 border border-slate-800 rounded-xl flex items-center overflow-hidden">
                     {formData.icon?.startsWith('/') ? (
                       <div className="w-full h-full flex items-center justify-between px-3 group">
-                        <img src={`http://localhost:8000${formData.icon}`} alt="Preview" className="h-6 w-6 object-cover rounded" />
+                        <img src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}${formData.icon}`} alt="Preview" className="h-6 w-6 object-cover rounded" />
                         <button type="button" onClick={() => setFormData(p => ({ ...p, icon: '' }))} className="text-gray-500 hover:text-rose-400">
                           <X className="w-4 h-4" />
                         </button>

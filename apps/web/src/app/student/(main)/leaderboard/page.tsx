@@ -113,7 +113,7 @@ export default function LeaderboardPage() {
             {selectedCat && (
               <span className="text-2xl flex items-center justify-center">
                 {selectedCat.category_icon?.startsWith('/') ? (
-                  <img src={`http://localhost:8000${selectedCat.category_icon}`} alt={selectedCat.category_name} className="w-8 h-8 object-contain" />
+                  <img src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}${selectedCat.category_icon}`} alt={selectedCat.category_name} className="w-8 h-8 object-contain" />
                 ) : (
                   selectedCat.category_icon
                 )}
@@ -191,7 +191,7 @@ export default function LeaderboardPage() {
               >
                 <span className="shrink-0">
                   {cat.category_icon?.startsWith('/') ? (
-                    <img src={`http://localhost:8000${cat.category_icon}`} alt={cat.category_name} className="w-5 h-5 object-contain" />
+                    <img src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}${cat.category_icon}`} alt={cat.category_name} className="w-5 h-5 object-contain" />
                   ) : (
                     cat.category_icon
                   )}
