@@ -11,9 +11,9 @@ async def parse_pdf_questions(file_bytes: bytes, category_id: int) -> list[Quest
             if extracted:
                 text += extracted + "\n"
 
-    q_matches = list(re.finditer(r"Q(\d+)\.", text))
+    q_matches = list(re.finditer(r"(?:^|\n)\s*(?:Q)?(\d+)\.?\s+", text))
     if not q_matches:
-        return []
+      return []
 
     questions_data = {}
     ans_text = ""
@@ -27,7 +27,7 @@ async def parse_pdf_questions(file_bytes: bytes, category_id: int) -> list[Quest
         
         if i == len(q_matches) - 1:
             # Last question chunk. Look for the answer key start.
-            ans_start_match = re.search(r"\b1\.?\s+[A-E]\b", chunk)
+            ans_start_match = re.search(r"\b1[\.\)]?\s+[A-Ea-e]\b", chunk)
             if ans_start_match:
                 ans_text = chunk[ans_start_match.start():]
                 chunk = chunk[:ans_start_match.start()]
@@ -35,11 +35,11 @@ async def parse_pdf_questions(file_bytes: bytes, category_id: int) -> list[Quest
                 ans_text = chunk
 
         # Parse options
-        a_match = re.search(r"(?:\s|^)A\.\s+", chunk)
-        b_match = re.search(r"(?:\s|^)B\.\s+", chunk)
-        c_match = re.search(r"(?:\s|^)C\.\s+", chunk)
-        d_match = re.search(r"(?:\s|^)D\.\s+", chunk)
-        e_match = re.search(r"(?:\s|^)E\.\s+", chunk)
+        a_match = re.search(r"(?:\s|^)[Aa][\.\)]\s+", chunk)
+        b_match = re.search(r"(?:\s|^)[Bb][\.\)]\s+", chunk)
+        c_match = re.search(r"(?:\s|^)[Cc][\.\)]\s+", chunk)
+        d_match = re.search(r"(?:\s|^)[Dd][\.\)]\s+", chunk)
+        e_match = re.search(r"(?:\s|^)[Ee][\.\)]\s+", chunk)
 
         indices = []
         if a_match: indices.append(('A', a_match))
@@ -87,10 +87,10 @@ async def parse_pdf_questions(file_bytes: bytes, category_id: int) -> list[Quest
         }
 
     # Parse answers
-    ans_pattern = re.compile(r"\b(\d+)\.?\s+([A-E])\b\s*(.*?)(?=\b\d+\.?\s+[A-E]\b|\Z)", re.DOTALL)
+    ans_pattern = re.compile(r"\b(\d+)[\.\)]?\s*([A-Ea-e])\b\s*(.*?)(?=\b\d+[\.\)]?\s*[A-Ea-e]\b|\Z)", re.DOTALL)
     for match in ans_pattern.finditer(ans_text):
         q_num = int(match.group(1))
-        ans_letter = match.group(2)
+        ans_letter = match.group(2).upper()
         explanation = match.group(3).strip()
         explanation = " ".join(explanation.split())
         
