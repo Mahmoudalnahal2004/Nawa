@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_db, get_current_active_user, oauth2_scheme, verify_supabase_jwt
@@ -5,6 +6,8 @@ from app.core.security import decode_token, create_access_token, verify_verifica
 from app.models.user import User
 from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserResponse, RefreshRequest, SyncProfileRequest
 from app.services.auth_service import authenticate_user, create_user, get_user_by_email, generate_tokens
+
+logger = logging.getLogger("app.auth")
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -114,65 +117,78 @@ async def sync_profile(
     # Verify Supabase Token
     supabase_payload = verify_supabase_jwt(token)
     if supabase_payload is None:
+        logger.warning("Sync profile failed: invalid or expired Supabase JWT token")
         raise credentials_exception
         
     supabase_user_id = supabase_payload.get("sub")
     email = supabase_payload.get("email")
     if not supabase_user_id or not email:
+        logger.warning("Sync profile failed: token missing sub (%s) or email (%s)", supabase_user_id, email)
         raise credentials_exception
         
-    # Check if user already exists by supabase_user_id
-    from sqlalchemy import select
-    result = await db.execute(select(User).where(User.supabase_user_id == supabase_user_id))
-    user = result.scalar_one_or_none()
-    
-    if user is None:
-        # Fallback to check by email if the user existed before but wasn't linked yet
-        result = await db.execute(select(User).where(User.email == email))
+    try:
+        # Check if user already exists by supabase_user_id
+        from sqlalchemy import select
+        result = await db.execute(select(User).where(User.supabase_user_id == supabase_user_id))
         user = result.scalar_one_or_none()
-        if user is not None:
-            user.supabase_user_id = supabase_user_id
-            
-    if user is not None:
-        # Update details if provided
-        user.full_name = data.full_name
-        if data.university is not None:
-            user.university = data.university
-        if data.study_year is not None:
-            user.study_year = data.study_year
-        await db.commit()
-        await db.refresh(user)
-    else:
-        # Provision new user in database
-        role = "student"
-        from app.core.config import settings
-        if email == getattr(settings, "SUPER_ADMIN_EMAIL", None):
-            role = "admin"
-            
-        # Get default quota for student
-        from app.models.quota import Quota
-        quota_id = None
-        if role == "student":
-            res_quota = await db.execute(select(Quota).where(Quota.is_default == True))
-            default_quota = res_quota.scalar_one_or_none()
-            if default_quota:
-                quota_id = default_quota.id
-                
-        user = User(
-            email=email,
-            hashed_password=None, # password is managed by Supabase
-            supabase_user_id=supabase_user_id,
-            full_name=data.full_name,
-            role=role,
-            is_active=True,
-            university=data.university,
-            study_year=data.study_year,
-            quota_id=quota_id
-        )
-        db.add(user)
-        await db.commit()
-        await db.refresh(user)
         
-    return UserResponse.model_validate(user)
+        if user is None:
+            # Fallback to check by email if the user existed before but wasn't linked yet
+            result = await db.execute(select(User).where(User.email == email))
+            user = result.scalar_one_or_none()
+            if user is not None:
+                user.supabase_user_id = supabase_user_id
+                logger.info("Sync profile: mapping legacy user %s to supabase_user_id %s", email, supabase_user_id)
+                
+        if user is not None:
+            # Update details if provided
+            user.full_name = data.full_name
+            if data.university is not None:
+                user.university = data.university
+            if data.study_year is not None:
+                user.study_year = data.study_year
+            await db.commit()
+            await db.refresh(user)
+            logger.info("Successfully synced existing user profile: %s (%s)", email, supabase_user_id)
+        else:
+            # Provision new user in database
+            role = "student"
+            from app.core.config import settings
+            if email == getattr(settings, "SUPER_ADMIN_EMAIL", None):
+                role = "admin"
+                
+            # Get default quota for student
+            from app.models.quota import Quota
+            quota_id = None
+            if role == "student":
+                res_quota = await db.execute(select(Quota).where(Quota.is_default == True))
+                default_quota = res_quota.scalar_one_or_none()
+                if default_quota:
+                    quota_id = default_quota.id
+                    
+            user = User(
+                email=email,
+                hashed_password=None, # password is managed by Supabase
+                supabase_user_id=supabase_user_id,
+                full_name=data.full_name,
+                role=role,
+                is_active=True,
+                university=data.university,
+                study_year=data.study_year,
+                quota_id=quota_id
+            )
+            db.add(user)
+            await db.commit()
+            await db.refresh(user)
+            logger.info("Successfully provisioned new local database user: %s (role: %s, university: %s)", email, role, data.university)
+            
+        return UserResponse.model_validate(user)
+    except Exception as e:
+        logger.error("Database error during sync profile for %s: %s", email, str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal database error during profile synchronization"
+        )
+
 
 

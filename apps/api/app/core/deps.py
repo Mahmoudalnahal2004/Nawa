@@ -28,8 +28,11 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 import time
 import urllib.request
 import json
+import logging
 from jose import jwt, JWTError
 from app.core.config import settings
+
+logger = logging.getLogger("app.auth")
 
 _jwks_cache = None
 _jwks_cache_expiry = 0
@@ -49,7 +52,7 @@ def fetch_jwks(supabase_url: str):
                 _jwks_cache_expiry = now + 3600  # Cache for 1 hour
                 return _jwks_cache
     except Exception as e:
-        print(f"Error fetching JWKS from Supabase: {e}")
+        logger.error("Error fetching JWKS from Supabase: %s", str(e))
         if _jwks_cache is not None:
             return _jwks_cache
     return None
@@ -57,16 +60,19 @@ def fetch_jwks(supabase_url: str):
 def verify_supabase_jwt(token: str) -> dict | None:
     supabase_url = getattr(settings, "SUPABASE_URL", None)
     if not supabase_url:
+        logger.error("Supabase configuration missing: SUPABASE_URL not configured")
         return None
         
     jwks = fetch_jwks(supabase_url)
     if not jwks:
+        logger.error("Failed to retrieve Supabase JWKS signing keys")
         return None
         
     try:
         unverified_header = jwt.get_unverified_header(token)
         kid = unverified_header.get("kid")
         if not kid:
+            logger.warning("Supabase JWT validation failed: missing 'kid' header")
             return None
             
         key = None
@@ -76,6 +82,7 @@ def verify_supabase_jwt(token: str) -> dict | None:
                 break
                 
         if not key:
+            logger.warning("Supabase JWT validation failed: no matching public key found for kid %s", kid)
             return None
             
         payload = jwt.decode(
@@ -86,9 +93,7 @@ def verify_supabase_jwt(token: str) -> dict | None:
         )
         return payload
     except Exception as e:
-        # Silent error in production, but print in debug mode
-        if settings.DEBUG:
-            print(f"Supabase JWT verification failed: {e}")
+        logger.warning("Supabase JWT verification failed: %s", str(e))
         return None
 
 async def get_current_user(
@@ -123,9 +128,11 @@ async def get_current_user(
                     user.supabase_user_id = supabase_user_id
                     await db.commit()
                     await db.refresh(user)
+                    logger.info("Successfully linked existing user email %s to supabase_user_id %s", email, supabase_user_id)
                     return user
             
             # User does not exist locally yet. They must hit the `/auth/sync-profile` route first.
+            logger.warning("Unauthorized access attempt: Supabase authenticated user %s (%s) not synced to local database", email or "unknown", supabase_user_id)
             raise credentials_exception
 
     # 2. Fallback to custom local JWT verification (temporary migration path)
@@ -139,10 +146,12 @@ async def get_current_user(
                     result = await db.execute(select(User).where(User.id == int(user_id)))
                     user = result.scalar_one_or_none()
                     if user is not None:
+                        logger.info("Authenticated user %s using legacy local JWT fallback", user.email)
                         return user
                 except ValueError:
                     pass
 
+    logger.warning("Unauthorized access attempt: invalid, expired, or missing authentication token")
     raise credentials_exception
 
 
