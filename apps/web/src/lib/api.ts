@@ -36,7 +36,8 @@ api.interceptors.request.use(async (config) => {
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    if (error.response?.status === 401) {
+    const isAuthRoute = error.config?.url?.includes('/auth/me') || error.config?.url?.includes('/auth/sync-profile');
+    if (error.response?.status === 401 && !isAuthRoute) {
       // Clear storage and redirect to login
       localStorage.removeItem('access_token');
       localStorage.removeItem('user');
