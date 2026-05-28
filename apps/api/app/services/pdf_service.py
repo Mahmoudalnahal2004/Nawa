@@ -11,7 +11,7 @@ async def parse_pdf_questions(file_bytes: bytes, category_id: int) -> list[Quest
             if extracted:
                 text += extracted + "\n"
 
-    q_matches = list(re.finditer(r"(?:^|\n)\s*(?:Q)?(\d+)\.?\s+", text))
+    q_matches = list(re.finditer(r"(?:^|\n)\s*(?:Q(\d+)\.?\s+|(\d+)\.\s+)", text))
     if not q_matches:
       return []
 
@@ -19,7 +19,7 @@ async def parse_pdf_questions(file_bytes: bytes, category_id: int) -> list[Quest
     ans_text = ""
 
     for i, match in enumerate(q_matches):
-        q_num = int(match.group(1))
+        q_num = int(match.group(1) or match.group(2))
         start_idx = match.end()
         end_idx = q_matches[i+1].start() if i + 1 < len(q_matches) else len(text)
         
@@ -87,6 +87,7 @@ async def parse_pdf_questions(file_bytes: bytes, category_id: int) -> list[Quest
         }
 
     # Parse answers
+    ans_text = re.sub(r',(?:\s*|""|\'\')?,', ',"A",', ans_text)
     ans_pattern = re.compile(r"\b(\d+)[\.\)]?\s*([A-Ea-e])\b\s*(.*?)(?=\b\d+[\.\)]?\s*[A-Ea-e]\b|\Z)", re.DOTALL)
     for match in ans_pattern.finditer(ans_text):
         q_num = int(match.group(1))

@@ -25,6 +25,13 @@ class RefreshRequest(BaseModel):
     refresh_token: str
 
 
+class SyncProfileRequest(BaseModel):
+    full_name: str
+    university: Optional[str] = None
+    study_year: Optional[int] = None
+
+
+
 class UserResponse(BaseModel):
     id: int
     email: str

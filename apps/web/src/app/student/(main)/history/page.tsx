@@ -33,6 +33,7 @@ interface AnalyticsData {
     quiz_name?: string;
     status: string;
     target_year?: number;
+    created_at: string;
   }[];
 }
 

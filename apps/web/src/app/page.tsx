@@ -2,19 +2,19 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { isAuthenticated, getStoredUser } from '@/lib/auth';
+import { useAuth } from '@/lib/auth-context';
 import { Stethoscope, BookOpen, Brain, TrendingUp, ArrowRight } from 'lucide-react';
 
 export default function HomePage() {
   const router = useRouter();
+  const { user, loading } = useAuth();
 
   useEffect(() => {
-    if (isAuthenticated()) {
-      const user = getStoredUser();
-      if (user?.role === 'admin') router.push('/admin/dashboard');
+    if (!loading && user) {
+      if (user.role === 'admin') router.push('/admin/dashboard');
       else router.push('/student/home');
     }
-  }, [router]);
+  }, [user, loading, router]);
 
   return (
     <div className="min-h-screen flex flex-col relative overflow-hidden">
@@ -59,10 +59,10 @@ export default function HomePage() {
             <button onClick={() => router.push('/login')} className="btn-primary text-base py-4 px-8">
               Start Studying <ArrowRight className="w-5 h-5 inline ml-2" />
             </button>
-            <a 
-              href="https://t.me/+201002429528" 
-              target="_blank" 
-              rel="noopener noreferrer" 
+            <a
+              href="https://t.me/+201002429528"
+              target="_blank"
+              rel="noopener noreferrer"
               className="btn-secondary text-base py-4 px-8 flex items-center justify-center"
             >
               Contact Us

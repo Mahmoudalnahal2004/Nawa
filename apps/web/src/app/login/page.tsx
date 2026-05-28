@@ -4,12 +4,14 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import api from '@/lib/api';
-import { storeAuth, isAuthenticated, getStoredUser } from '@/lib/auth';
+import { useAuth } from '@/lib/auth-context';
+import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { Eye, EyeOff, Stethoscope, ArrowRight, Loader2, Mail, Check } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
+  const { syncProfile, refreshProfile } = useAuth();
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -33,14 +35,6 @@ export default function LoginPage() {
       api.get('/universities').then(res => setUniversities(res.data)).catch(console.error);
     }
   }, [isLogin, universities.length]);
-
-  useEffect(() => {
-    if (isAuthenticated()) {
-      const user = getStoredUser();
-      if (user?.role === 'admin') router.push('/admin/dashboard');
-      else router.push('/student/home');
-    }
-  }, [router]);
 
   const passwordCriteria = {
     minChar: password.length >= 8,
@@ -78,16 +72,30 @@ export default function LoginPage() {
 
     try {
       if (isLogin) {
-        const { data: tokens } = await api.post('/auth/login', { email, password });
-        // Get user info
-        const tempApi = api.create?.({}) || api;
-        const { data: user } = await api.get('/auth/me', {
-          headers: { Authorization: `Bearer ${tokens.access_token}` },
+        // Sign in via Supabase Auth
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
         });
-        storeAuth(tokens.access_token, tokens.refresh_token, user);
-        toast.success('Welcome back!');
-        if (user.role === 'admin') router.push('/admin/dashboard');
-        else router.push('/student/home');
+
+        if (error) {
+          toast.error(error.message || 'Invalid email or password');
+          setLoading(false);
+          return;
+        }
+
+        if (data.session) {
+          // Sync profile to ensure user exists locally
+          try {
+            const profile = await refreshProfile();
+            toast.success('Welcome back!');
+            if (profile?.role === 'admin') router.push('/admin/dashboard');
+            else router.push('/student/home');
+          } catch (syncErr) {
+            console.error('Failed to sync profile on login:', syncErr);
+            toast.error('Failed to link your local profile. Please try again.');
+          }
+        }
       } else {
         if (password !== confirmPassword) {
           toast.error('Passwords do not match');
@@ -99,19 +107,48 @@ export default function LoginPage() {
           setLoading(false);
           return;
         }
-        await api.post('/auth/register', { 
 
-          email, 
-          password, 
-          full_name: fullName,
-          university: university || null,
-          study_year: studyYear ? parseInt(studyYear) : null
+        // Sign up via Supabase Auth
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              full_name: fullName,
+              university: university || null,
+              study_year: studyYear ? parseInt(studyYear) : null,
+            },
+          },
         });
-        toast.success('Account created! Please check your email to verify.');
-        setIsRegistered(true);
+
+        if (error) {
+          toast.error(error.message || 'Signup failed');
+          setLoading(false);
+          return;
+        }
+
+        if (data.session) {
+          // If auto-logged in, sync profile directly
+          try {
+            await syncProfile(
+              fullName,
+              university || undefined,
+              studyYear ? parseInt(studyYear) : undefined
+            );
+            toast.success('Account created! Welcome to Nawa.');
+            router.push('/student/home');
+          } catch (syncErr) {
+            console.error('Failed to sync profile on registration:', syncErr);
+            toast.error('Account created, but failed to sync local profile.');
+          }
+        } else {
+          // If confirmation email is required
+          toast.success('Account created! Please check your email to verify.');
+          setIsRegistered(true);
+        }
       }
     } catch (err: any) {
-      const message = err.response?.data?.detail || 'Something went wrong';
+      const message = err.message || 'Something went wrong';
       toast.error(message);
     } finally {
       setLoading(false);

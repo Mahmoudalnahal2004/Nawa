@@ -4,11 +4,13 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/api';
 import { toast } from 'sonner';
-import { getStoredUser } from '@/lib/auth';
+import { useAuth } from '@/lib/auth-context';
+import { supabase } from '@/lib/supabase';
 import { User, Save, Loader2, Lock, KeyRound, Eye, EyeOff } from 'lucide-react';
 
 export default function AdminProfilePage() {
   const router = useRouter();
+  const { refreshProfile } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
@@ -40,14 +42,11 @@ export default function AdminProfilePage() {
     e.preventDefault();
     setSaving(true);
     try {
-      const res = await api.patch('/users/me/profile', {
+      await api.patch('/users/me/profile', {
         full_name: form.full_name || undefined,
       });
       
-      const currentUser = getStoredUser();
-      if (currentUser) {
-        localStorage.setItem('user', JSON.stringify({ ...currentUser, full_name: res.data.full_name }));
-      }
+      await refreshProfile();
       
       toast.success('Profile saved!');
       window.location.reload();
@@ -60,14 +59,17 @@ export default function AdminProfilePage() {
 
   const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!passwordForm.current_password || !passwordForm.new_password) return;
+    if (!passwordForm.new_password) return;
     setChangingPassword(true);
     try {
-      await api.post('/users/me/change-password', passwordForm);
+      const { error } = await supabase.auth.updateUser({
+        password: passwordForm.new_password,
+      });
+      if (error) throw error;
       toast.success('Password changed successfully!');
       setPasswordForm({ current_password: '', new_password: '' });
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Failed to change password');
+      toast.error(err.message || 'Failed to change password');
     } finally {
       setChangingPassword(false);
     }

@@ -250,7 +250,7 @@ async def get_quiz_results(db: AsyncSession, session_id: str, user_id: int) -> Q
     correct = sum(1 for a in answers if a.is_correct)
     score = (correct / total * 100) if total > 0 else 0
     
-    return QuizResultSummary(session_id=session_id, total_questions=total, correct_count=correct, incorrect_count=total - correct, score_percentage=round(score, 1), answers=answers)
+    return QuizResultSummary(session_id=session_id, total_questions=total, correct_count=correct, incorrect_count=len(answers) - correct, score_percentage=round(score, 1), answers=answers)
 
 
 async def get_quiz_session(db: AsyncSession, session_id: str) -> dict | None:

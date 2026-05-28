@@ -17,6 +17,12 @@ interface Question {
   created_at: string;
 }
 
+type RowItem = 
+  | { type: 'main_cat'; mainCat: string; subCats: Record<string, Record<string, Question[]>> }
+  | { type: 'sub_cat'; mainCat: string; subCat: string; topics: Record<string, Question[]> }
+  | { type: 'topic'; mainCat: string; subCat: string; topic: string; questions: Question[] }
+  | { type: 'question'; question: Question; topic: string; subCat: string; mainCat: string };
+
 export default function QuestionsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -30,6 +36,7 @@ export default function QuestionsPage() {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isPdfPreviewOpen, setIsPdfPreviewOpen] = useState(false);
   const [parsedQuestions, setParsedQuestions] = useState<any[]>([]);
+  const [defaultCategoryId, setDefaultCategoryId] = useState<number | undefined>(undefined);
   const [expandedMainCats, setExpandedMainCats] = useState<Record<string, boolean>>({});
   const [expandedSubCats, setExpandedSubCats] = useState<Record<string, boolean>>({});
   const [expandedTopics, setExpandedTopics] = useState<Record<string, boolean>>({});
@@ -50,17 +57,19 @@ export default function QuestionsPage() {
   };
 
   useEffect(() => {
-    if (searchParams.get('importCategoryId')) {
+    const catId = searchParams.get('importCategoryId');
+    if (catId) {
+      setDefaultCategoryId(Number(catId));
       setIsImportModalOpen(true);
     }
   }, [searchParams]);
 
-  useEffect(() => { loadQuestions(); }, [page, statusFilter, yearFilter]);
+  useEffect(() => { setPage(1); loadQuestions(); }, [statusFilter, yearFilter]);
 
   const loadQuestions = async () => {
     setLoading(true);
     try {
-      const params: any = { page, page_size: pageSize };
+      const params: any = { page: 1, page_size: 10000 };
       if (statusFilter) params.status = statusFilter;
       if (search) params.search = search;
       if (yearFilter && yearFilter !== 'All') params.target_year = yearFilter;
@@ -108,7 +117,64 @@ export default function QuestionsPage() {
     } catch { toast.error('Failed to delete'); }
   };
 
-  const totalPages = Math.ceil(total / pageSize);
+  const getVisibleRows = (): RowItem[] => {
+    const rows: RowItem[] = [];
+    
+    const grouped = questions.reduce((acc, q) => {
+      const catParts = q.category_name ? q.category_name.split(' - ') : ['Uncategorized'];
+      const mainCat = catParts[0].trim();
+      const subCat = catParts.length > 1 ? catParts[1].trim() : 'General';
+      const topic = catParts.length > 2 ? catParts.slice(2).join(' - ').trim() : 'General';
+      
+      if (!acc[mainCat]) acc[mainCat] = {};
+      if (!acc[mainCat][subCat]) acc[mainCat][subCat] = {};
+      if (!acc[mainCat][subCat][topic]) acc[mainCat][subCat][topic] = [];
+      acc[mainCat][subCat][topic].push(q);
+      
+      return acc;
+    }, {} as Record<string, Record<string, Record<string, Question[]>>>);
+
+    const sortedMainCats = Object.entries(grouped).sort((a, b) => a[0].localeCompare(b[0]));
+
+    for (const [mainCat, subCats] of sortedMainCats) {
+      rows.push({ type: 'main_cat', mainCat, subCats });
+      
+      const isMainExpanded = expandedMainCats[mainCat];
+      if (isMainExpanded) {
+        const sortedSubCats = Object.entries(subCats).sort((a, b) => a[0].localeCompare(b[0]));
+        for (const [subCat, topics] of sortedSubCats) {
+          if (subCat !== 'General') {
+            rows.push({ type: 'sub_cat', mainCat, subCat, topics });
+          }
+          
+          const isSubExpanded = expandedSubCats[`${mainCat}-${subCat}`];
+          if (isSubExpanded || subCat === 'General') {
+            const sortedTopics = Object.entries(topics).sort((a, b) => a[0].localeCompare(b[0]));
+            for (const [topic, qs] of sortedTopics) {
+              if (topic !== 'General') {
+                rows.push({ type: 'topic', mainCat, subCat, topic, questions: qs });
+              }
+              
+              const isTopicExpanded = expandedTopics[`${mainCat}-${subCat}-${topic}`];
+              if (isTopicExpanded || topic === 'General') {
+                for (const q of qs) {
+                  rows.push({ type: 'question', question: q, topic, subCat, mainCat });
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return rows;
+  };
+
+  const visibleRows = getVisibleRows();
+  const totalVisible = visibleRows.length;
+  const totalPages = Math.ceil(totalVisible / pageSize);
+  const currentPage = Math.min(page, Math.max(1, totalPages));
+  const paginatedRows = visibleRows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const getDifficultyColor = (d: string) => {
     if (d === 'easy') return 'badge-emerald';
@@ -187,111 +253,106 @@ export default function QuestionsPage() {
               ) : questions.length === 0 ? (
                 <tr><td colSpan={4} className="text-center py-12 text-gray-500">No questions found</td></tr>
               ) : (
-                Object.entries(
-                  questions.reduce((acc, q) => {
-                    const catParts = q.category_name ? q.category_name.split(' - ') : ['Uncategorized'];
-                    const mainCat = catParts[0].trim();
-                    const subCat = catParts.length > 1 ? catParts[1].trim() : 'General';
-                    const topic = catParts.length > 2 ? catParts.slice(2).join(' - ').trim() : 'General';
-                    
-                    if (!acc[mainCat]) acc[mainCat] = {};
-                    if (!acc[mainCat][subCat]) acc[mainCat][subCat] = {};
-                    if (!acc[mainCat][subCat][topic]) acc[mainCat][subCat][topic] = [];
-                    acc[mainCat][subCat][topic].push(q);
-                    
-                    return acc;
-                  }, {} as Record<string, Record<string, Record<string, Question[]>>>)
-                ).map(([mainCat, subCats]) => {
-                  const isMainExpanded = expandedMainCats[mainCat];
-                  return (
-                    <Fragment key={mainCat}>
-                      <tr className="bg-slate-800/50 cursor-pointer hover:bg-slate-800/70 transition-colors group/main" onClick={() => toggleMainCat(mainCat)}>
-                        <td colSpan={4} className="font-bold text-emerald-400 py-3 border-l-4 border-emerald-500 select-none">
+                paginatedRows.map((row) => {
+                  if (row.type === 'main_cat') {
+                    const { mainCat, subCats } = row;
+                    const isMainExpanded = expandedMainCats[mainCat];
+                    return (
+                      <tr 
+                        key={`main-${mainCat}`} 
+                        className="bg-slate-800/50 cursor-pointer hover:bg-slate-800/70 transition-colors group/main border-b border-white/5" 
+                        onClick={() => toggleMainCat(mainCat)}
+                      >
+                        <td colSpan={4} className="font-bold text-emerald-400 py-3 border-l-4 border-emerald-500 select-none text-xs sm:text-sm">
                           <div className="flex items-center justify-between pr-4">
                             <div className="flex items-center gap-2">
                               {isMainExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                               {mainCat}
                             </div>
                             <div className="flex items-center gap-2 opacity-0 group-hover/main:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
-                              <button onClick={() => handleBulkStatus(Object.values(subCats).flatMap(t => Object.values(t).flat()).map(q => q.id), 'published')} className="text-xs px-2 py-1 rounded bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/40 transition-colors">Publish All</button>
-                              <button onClick={() => handleBulkStatus(Object.values(subCats).flatMap(t => Object.values(t).flat()).map(q => q.id), 'draft')} className="text-xs px-2 py-1 rounded bg-amber-500/20 text-amber-400 hover:bg-amber-500/40 transition-colors">Draft All</button>
+                              <button onClick={() => handleBulkStatus(Object.values(subCats).flatMap(t => Object.values(t).flat()).map(q => q.id), 'published')} className="text-[10px] px-2 py-1 rounded bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/40 transition-colors">Publish All</button>
+                              <button onClick={() => handleBulkStatus(Object.values(subCats).flatMap(t => Object.values(t).flat()).map(q => q.id), 'draft')} className="text-[10px] px-2 py-1 rounded bg-amber-500/20 text-amber-400 hover:bg-amber-500/40 transition-colors">Draft All</button>
                             </div>
                           </div>
                         </td>
                       </tr>
-                      {isMainExpanded && Object.entries(subCats).map(([subCat, topics]) => {
-                        const isSubExpanded = expandedSubCats[`${mainCat}-${subCat}`];
-                        return (
-                          <Fragment key={`${mainCat}-${subCat}`}>
-                            {subCat !== 'General' && (
-                              <tr className="bg-slate-800/20 cursor-pointer hover:bg-slate-800/40 transition-colors group/sub" onClick={() => toggleSubCat(mainCat, subCat)}>
-                                <td colSpan={4} className="font-semibold text-gray-300 py-2 pl-8 border-l-4 border-emerald-500/40 select-none">
-                                  <div className="flex items-center justify-between pr-4">
-                                    <div className="flex items-center gap-2">
-                                      {isSubExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-                                      {subCat}
-                                    </div>
-                                    <div className="flex items-center gap-2 opacity-0 group-hover/sub:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
-                                      <button onClick={() => handleBulkStatus(Object.values(topics).flat().map(q => q.id), 'published')} className="text-xs px-2 py-1 rounded bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/40 transition-colors">Publish</button>
-                                      <button onClick={() => handleBulkStatus(Object.values(topics).flat().map(q => q.id), 'draft')} className="text-xs px-2 py-1 rounded bg-amber-500/20 text-amber-400 hover:bg-amber-500/40 transition-colors">Draft</button>
-                                    </div>
-                                  </div>
-                                </td>
-                              </tr>
-                            )}
-                            {(isSubExpanded || subCat === 'General') && Object.entries(topics).map(([topic, qs]) => {
-                              const isTopicExpanded = expandedTopics[`${mainCat}-${subCat}-${topic}`];
-                              return (
-                                <Fragment key={`${mainCat}-${subCat}-${topic}`}>
-                                  {topic !== 'General' && (
-                                    <tr className="bg-slate-800/10 cursor-pointer hover:bg-slate-800/30 transition-colors group/topic" onClick={() => toggleTopic(mainCat, subCat, topic)}>
-                                      <td colSpan={4} className="font-medium text-gray-400 py-2 pl-12 border-l-4 border-emerald-500/20 select-none">
-                                        <div className="flex items-center justify-between pr-4">
-                                          <div className="flex items-center gap-2">
-                                            {isTopicExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                                            {topic}
-                                          </div>
-                                          <div className="flex items-center gap-2 opacity-0 group-hover/topic:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
-                                            <button onClick={() => handleBulkStatus(qs.map(q => q.id), 'published')} className="text-xs px-2 py-1 rounded bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/40 transition-colors">Publish</button>
-                                            <button onClick={() => handleBulkStatus(qs.map(q => q.id), 'draft')} className="text-xs px-2 py-1 rounded bg-amber-500/20 text-amber-400 hover:bg-amber-500/40 transition-colors">Draft</button>
-                                          </div>
-                                        </div>
-                                      </td>
-                                    </tr>
-                                  )}
-                                  {(isTopicExpanded || topic === 'General') && qs.map((q) => (
-                                    <tr key={q.id}>
-                                      <td className={`max-w-md ${topic !== 'General' ? 'pl-16' : subCat !== 'General' ? 'pl-12' : 'pl-8'}`}>
-                                        <p className="text-white line-clamp-2 text-sm" dangerouslySetInnerHTML={{ __html: q.question_text.substring(0, 120) + (q.question_text.length > 120 ? '...' : '') }} />
-                                      </td>
-                                      <td><span className={getDifficultyColor(q.difficulty)}>{q.difficulty}</span></td>
-                                      <td>
-                                        <button onClick={() => togglePublish(q.id)}
-                                          className={q.status === 'published' ? 'badge-emerald cursor-pointer' : 'badge-amber cursor-pointer'}>
-                                          {q.status}
-                                        </button>
-                                      </td>
-                                      <td>
-                                        <div className="flex items-center gap-2">
-                                          <button onClick={() => router.push(`/admin/questions/${q.id}`)} className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-colors">
-                                            <Pencil className="w-4 h-4" />
-                                          </button>
-                                          <button onClick={() => deleteQuestion(q.id)} className="p-1.5 rounded-lg hover:bg-rose-500/10 text-gray-400 hover:text-rose-400 transition-colors">
-                                            <Trash2 className="w-4 h-4" />
-                                          </button>
-                                        </div>
-                                      </td>
-                                    </tr>
-                                  ))}
-                                </Fragment>
-                              );
-                            })}
-                          </Fragment>
-                        );
-                      })}
-                    </Fragment>
-                  );
+                    );
+                  } else if (row.type === 'sub_cat') {
+                    const { mainCat, subCat, topics } = row;
+                    const isSubExpanded = expandedSubCats[`${mainCat}-${subCat}`];
+                    return (
+                      <tr 
+                        key={`sub-${mainCat}-${subCat}`} 
+                        className="bg-slate-800/20 cursor-pointer hover:bg-slate-800/40 transition-colors group/sub border-b border-white/5" 
+                        onClick={() => toggleSubCat(mainCat, subCat)}
+                      >
+                        <td colSpan={4} className="font-semibold text-gray-300 py-2 pl-8 border-l-4 border-emerald-500/40 select-none text-xs sm:text-sm">
+                          <div className="flex items-center justify-between pr-4">
+                            <div className="flex items-center gap-2">
+                              {isSubExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                              {subCat}
+                            </div>
+                            <div className="flex items-center gap-2 opacity-0 group-hover/sub:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+                              <button onClick={() => handleBulkStatus(Object.values(topics).flat().map(q => q.id), 'published')} className="text-[10px] px-2 py-1 rounded bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/40 transition-colors">Publish</button>
+                              <button onClick={() => handleBulkStatus(Object.values(topics).flat().map(q => q.id), 'draft')} className="text-[10px] px-2 py-1 rounded bg-amber-500/20 text-amber-400 hover:bg-amber-500/40 transition-colors">Draft</button>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  } else if (row.type === 'topic') {
+                    const { mainCat, subCat, topic, questions: qs } = row;
+                    const isTopicExpanded = expandedTopics[`${mainCat}-${subCat}-${topic}`];
+                    return (
+                      <tr 
+                        key={`topic-${mainCat}-${subCat}-${topic}`} 
+                        className="bg-slate-800/10 cursor-pointer hover:bg-slate-800/30 transition-colors group/topic border-b border-white/5" 
+                        onClick={() => toggleTopic(mainCat, subCat, topic)}
+                      >
+                        <td colSpan={4} className="font-medium text-gray-400 py-2 pl-12 border-l-4 border-emerald-500/20 select-none text-xs sm:text-sm">
+                          <div className="flex items-center justify-between pr-4">
+                            <div className="flex items-center gap-2">
+                              {isTopicExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                              {topic}
+                            </div>
+                            <div className="flex items-center gap-2 opacity-0 group-hover/topic:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+                              <button onClick={() => handleBulkStatus(qs.map(q => q.id), 'published')} className="text-[10px] px-2 py-1 rounded bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/40 transition-colors">Publish</button>
+                              <button onClick={() => handleBulkStatus(qs.map(q => q.id), 'draft')} className="text-[10px] px-2 py-1 rounded bg-amber-500/20 text-amber-400 hover:bg-amber-500/40 transition-colors">Draft</button>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  } else if (row.type === 'question') {
+                    const { question: q, topic, subCat, mainCat } = row;
+                    return (
+                      <tr key={`question-${q.id}`} className="border-b border-white/5">
+                        <td className={`max-w-md ${topic !== 'General' ? 'pl-16' : subCat !== 'General' ? 'pl-12' : 'pl-8'}`}>
+                          <p className="text-white line-clamp-2 text-sm" dangerouslySetInnerHTML={{ __html: q.question_text.substring(0, 120) + (q.question_text.length > 120 ? '...' : '') }} />
+                        </td>
+                        <td><span className={getDifficultyColor(q.difficulty)}>{q.difficulty}</span></td>
+                        <td>
+                          <button onClick={() => togglePublish(q.id)}
+                            className={q.status === 'published' ? 'badge-emerald cursor-pointer' : 'badge-amber cursor-pointer'}>
+                            {q.status}
+                          </button>
+                        </td>
+                        <td>
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => router.push(`/admin/questions/${q.id}`)} className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-colors">
+                              <Pencil className="w-4 h-4" />
+                            </button>
+                            <button onClick={() => deleteQuestion(q.id)} className="p-1.5 rounded-lg hover:bg-rose-500/10 text-gray-400 hover:text-rose-400 transition-colors">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  }
+                  return null;
                 })
+
               )}
             </tbody>
           </table>
@@ -300,12 +361,12 @@ export default function QuestionsPage() {
         {/* Pagination */}
         {totalPages > 1 && (
           <div className="flex items-center justify-between px-4 py-3 border-t border-white/5">
-            <p className="text-sm text-gray-400">Page {page} of {totalPages}</p>
+            <p className="text-sm text-gray-400">Page {currentPage} of {totalPages}</p>
             <div className="flex gap-2">
-              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="btn-secondary py-1.5 px-3 text-sm disabled:opacity-30">
+              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="btn-secondary py-1.5 px-3 text-sm disabled:opacity-30">
                 <ChevronLeft className="w-4 h-4" />
               </button>
-              <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="btn-secondary py-1.5 px-3 text-sm disabled:opacity-30">
+              <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="btn-secondary py-1.5 px-3 text-sm disabled:opacity-30">
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>
@@ -315,7 +376,7 @@ export default function QuestionsPage() {
 
       <BulkImportModal 
         isOpen={isImportModalOpen} 
-        categoryId={searchParams.get('importCategoryId') ? Number(searchParams.get('importCategoryId')) : undefined}
+        categoryId={defaultCategoryId}
         onClose={() => {
           setIsImportModalOpen(false);
           // Optional: clear the query param
@@ -323,7 +384,11 @@ export default function QuestionsPage() {
             router.replace('/admin/questions');
           }
         }} 
-        onSuccess={() => { setPage(1); loadQuestions(); }}
+        onSuccess={() => { 
+          setPage(1); 
+          loadQuestions(); 
+          setDefaultCategoryId(undefined);
+        }}
         onPdfParsed={(questions) => {
           setParsedQuestions(questions);
           setIsPdfPreviewOpen(true);
@@ -332,9 +397,17 @@ export default function QuestionsPage() {
 
       <PdfImportPreviewModal
         isOpen={isPdfPreviewOpen}
-        onClose={() => setIsPdfPreviewOpen(false)}
-        onSuccess={() => { setPage(1); loadQuestions(); }}
+        onClose={() => {
+          setIsPdfPreviewOpen(false);
+          setDefaultCategoryId(undefined);
+        }}
+        onSuccess={() => { 
+          setPage(1); 
+          loadQuestions(); 
+          setDefaultCategoryId(undefined);
+        }}
         initialQuestions={parsedQuestions}
+        defaultCategoryId={defaultCategoryId}
       />
     </div>
   );

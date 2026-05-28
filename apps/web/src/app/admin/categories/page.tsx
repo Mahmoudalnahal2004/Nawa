@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, Fragment } from 'react';
 import api from '@/lib/api';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
-import { Loader2, Plus, Pencil, Trash2, FolderTree, CornerDownRight, X, LayoutTemplate, Image as ImageIcon, Upload, Eye, EyeOff, ChevronRight, ChevronDown, AlertTriangle, FolderPlus } from 'lucide-react';
+import { Loader2, Plus, Pencil, Trash2, FolderTree, CornerDownRight, X, LayoutTemplate, Image as ImageIcon, Upload, Eye, EyeOff, ChevronRight, ChevronDown, AlertTriangle, FolderPlus, Pin } from 'lucide-react';
 
 interface Category {
   id: number;
@@ -22,6 +22,80 @@ export default function AdminCategoriesPage() {
   const router = useRouter();
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isMounted, setIsMounted] = useState(false);
+  const [pinnedCategoryIds, setPinnedCategoryIds] = useState<number[]>([]);
+
+  const updatePins = () => {
+    try {
+      const stored = localStorage.getItem('pinnedCategoryIds');
+      if (stored) {
+        setPinnedCategoryIds(JSON.parse(stored));
+      } else {
+        setPinnedCategoryIds([]);
+      }
+    } catch (e) {
+      setPinnedCategoryIds([]);
+    }
+  };
+
+  useEffect(() => {
+    setIsMounted(true);
+    updatePins();
+
+    window.addEventListener('storage', updatePins);
+    window.addEventListener('pinned-categories-changed', updatePins);
+    return () => {
+      window.removeEventListener('storage', updatePins);
+      window.removeEventListener('pinned-categories-changed', updatePins);
+    };
+  }, []);
+
+  const togglePin = (id: number) => {
+    setPinnedCategoryIds(prev => {
+      const next = prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id];
+      localStorage.setItem('pinnedCategoryIds', JSON.stringify(next));
+      window.dispatchEvent(new Event('pinned-categories-changed'));
+      return next;
+    });
+  };
+
+  const findCategoryAndPath = (
+    cats: Category[],
+    targetId: number,
+    currentPath: string[] = []
+  ): { category: Category; path: string } | null => {
+    for (const cat of cats) {
+      const newPath = [...currentPath, cat.name];
+      if (cat.id === targetId) {
+        return { category: cat, path: newPath.join(' > ') };
+      }
+      if (cat.children && cat.children.length > 0) {
+        const result = findCategoryAndPath(cat.children, targetId, newPath);
+        if (result) return result;
+      }
+    }
+    return null;
+  };
+
+  const getCategoryLevel = (cat: Category): 'module' | 'sub' | 'topic' => {
+    if (cat.parent_id === null) return 'module';
+    
+    const findParent = (cats: Category[], parentId: number): Category | null => {
+      for (const c of cats) {
+        if (c.id === parentId) return c;
+        if (c.children && c.children.length > 0) {
+          const found = findParent(c.children, parentId);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+    
+    const parent = findParent(categories, cat.parent_id);
+    if (!parent) return 'module';
+    if (parent.parent_id === null) return 'sub';
+    return 'topic';
+  };
   
   const countTotalQuestions = (cat: Category): number => {
     let count = cat.question_count || 0;
@@ -31,6 +105,220 @@ export default function AdminCategoriesPage() {
       }
     }
     return count;
+  };
+
+  const renderModule = (module: Category) => {
+    return (
+      <div key={module.id} className="p-4 hover:bg-white/5 transition-colors group">
+        {/* Top-Level Module Row */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className={`w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center border border-blue-500/20 overflow-hidden text-2xl ${!module.is_active ? 'opacity-40 grayscale' : ''}`}>
+              {module.icon?.startsWith('/') ? (
+                <img src={`http://localhost:8000${module.icon}`} alt={module.name} className="w-full h-full object-cover" />
+              ) : (
+                module.icon || <ImageIcon className="w-5 h-5 text-blue-400" />
+              )}
+            </div>
+            <div>
+              <h3 className={`font-semibold flex items-center gap-2 ${!module.is_active ? 'text-gray-500' : 'text-white'}`}>
+                {module.children && module.children.length > 0 && (
+                  <button onClick={() => toggleExpand(module.id)} className="p-0.5 hover:bg-white/10 rounded-md transition-colors text-gray-400">
+                    {expandedCategories.includes(module.id) ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                  </button>
+                )}
+                <span className={!module.is_active ? 'line-through' : ''}>{module.name}</span>
+                {module.target_year && (
+                  <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/20">
+                    Year {module.target_year}
+                  </span>
+                )}
+                <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-white/10 text-gray-400">
+                  ID: {module.id}
+                </span>
+                {!module.is_active && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/20">
+                    Hidden
+                  </span>
+                )}
+              </h3>
+              <p className="text-xs text-gray-400 mt-0.5">
+                {module.description || 'No description provided'} • {countTotalQuestions(module)} Questions
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {/* Pinned indicator visible always */}
+            {isMounted && pinnedCategoryIds.includes(module.id) && (
+              <button onClick={() => togglePin(module.id)} className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors" title="Unpin Category">
+                <Pin className="w-4 h-4 rotate-[45deg] fill-emerald-400" />
+              </button>
+            )}
+            <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+              {isMounted && !pinnedCategoryIds.includes(module.id) && (
+                <button onClick={() => togglePin(module.id)} className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors" title="Pin Category">
+                  <Pin className="w-4 h-4 rotate-[45deg]" />
+                </button>
+              )}
+              <button onClick={() => handleToggleActive(module)} className={`p-2 rounded-lg transition-colors ${module.is_active ? 'bg-white/5 hover:bg-amber-500/20 text-gray-400 hover:text-amber-400' : 'bg-rose-500/10 text-rose-400 hover:bg-emerald-500/20 hover:text-emerald-400'}`} title={module.is_active ? "Hide Module" : "Show Module"}>
+                {module.is_active ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+              </button>
+              <button onClick={() => router.push(`/admin/questions/new?categoryId=${module.id}`)} className="p-2 rounded-lg bg-white/5 hover:bg-emerald-500/20 text-gray-400 hover:text-emerald-400 transition-colors" title="Create Question">
+                <Plus className="w-4 h-4" />
+              </button>
+              <button onClick={() => openAddSubcategoryModal(module)} className="p-2 rounded-lg bg-white/5 hover:bg-emerald-500/20 text-gray-400 hover:text-emerald-400 transition-colors" title="Add Subcategory">
+                <FolderPlus className="w-4 h-4" />
+              </button>
+              <button onClick={() => router.push(`/admin/questions?importCategoryId=${module.id}`)} className="p-2 rounded-lg bg-white/5 hover:bg-emerald-500/20 text-gray-400 hover:text-emerald-400 transition-colors" title="Import Questions">
+                <Upload className="w-4 h-4" />
+              </button>
+              <button onClick={() => openEditModal(module)} className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors" title="Edit Module">
+                <Pencil className="w-4 h-4" />
+              </button>
+              <button onClick={() => setCategoryToDelete({id: module.id, name: module.name})} className="p-2 rounded-lg bg-white/5 hover:bg-rose-500/20 text-gray-400 hover:text-rose-400 transition-colors" title="Delete Module">
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Subcategories */}
+        {module.children && module.children.length > 0 && expandedCategories.includes(module.id) && (
+          <div className="mt-3 pl-14 space-y-2">
+            {module.children.map(sub => (
+              <Fragment key={sub.id}>
+                {renderSubcategory(sub)}
+              </Fragment>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderSubcategory = (sub: Category) => {
+    return (
+      <div key={sub.id}>
+        <div className="flex items-center justify-between p-3 rounded-lg bg-slate-900/50 border border-white/5 group/sub">
+          <div className="flex items-center gap-3">
+            <CornerDownRight className={`w-4 h-4 ${!sub.is_active ? 'text-gray-700' : 'text-gray-600'}`} />
+            <div>
+              <p className={`text-sm font-medium flex items-center gap-2 ${!sub.is_active ? 'text-gray-500' : 'text-gray-200'}`}>
+                {sub.children && sub.children.length > 0 && (
+                  <button onClick={() => toggleExpand(sub.id)} className="p-0.5 hover:bg-white/10 rounded-md transition-colors text-gray-400">
+                    {expandedCategories.includes(sub.id) ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                  </button>
+                )}
+                <span className={!sub.is_active ? 'line-through' : ''}>{sub.name}</span>
+                {sub.target_year && (
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    Year {sub.target_year}
+                  </span>
+                )}
+                {!sub.is_active && (
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-400 border border-rose-500/20">
+                    Hidden
+                  </span>
+                )}
+              </p>
+              <p className="text-xs text-gray-500">{sub.description || 'No description'} • {countTotalQuestions(sub)} Questions</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5">
+            {/* Pinned indicator visible always */}
+            {isMounted && pinnedCategoryIds.includes(sub.id) && (
+              <button onClick={() => togglePin(sub.id)} className="p-1.5 rounded-md bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors" title="Unpin Category">
+                <Pin className="w-3.5 h-3.5 rotate-[45deg] fill-emerald-400" />
+              </button>
+            )}
+            <div className="flex items-center gap-1.5 opacity-0 group-hover/sub:opacity-100 transition-opacity">
+              {isMounted && !pinnedCategoryIds.includes(sub.id) && (
+                <button onClick={() => togglePin(sub.id)} className="p-1.5 rounded-md bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors" title="Pin Category">
+                  <Pin className="w-3.5 h-3.5 rotate-[45deg]" />
+                </button>
+              )}
+              <button onClick={() => handleToggleActive(sub)} className={`p-1.5 rounded-md transition-colors ${sub.is_active ? 'bg-white/5 hover:bg-amber-500/20 text-gray-400 hover:text-amber-400' : 'bg-rose-500/10 text-rose-400 hover:bg-emerald-500/20 hover:text-emerald-400'}`} title={sub.is_active ? "Hide Module" : "Show Module"}>
+                {sub.is_active ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+              </button>
+              <button onClick={() => router.push(`/admin/questions/new?categoryId=${sub.id}`)} className="p-1.5 rounded-md bg-white/5 hover:bg-emerald-500/20 text-gray-400 hover:text-emerald-400 transition-colors" title="Create Question">
+                <Plus className="w-3.5 h-3.5" />
+              </button>
+              <button onClick={() => openAddSubcategoryModal(sub)} className="p-1.5 rounded-md bg-white/5 hover:bg-emerald-500/20 text-gray-400 hover:text-emerald-400 transition-colors" title="Add Topic/Subcategory">
+                <FolderPlus className="w-3.5 h-3.5" />
+              </button>
+              <button onClick={() => router.push(`/admin/questions?importCategoryId=${sub.id}`)} className="p-1.5 rounded-md bg-white/5 hover:bg-emerald-500/20 text-gray-400 hover:text-emerald-400 transition-colors" title="Import Questions">
+                <Upload className="w-3.5 h-3.5" />
+              </button>
+              <button onClick={() => openEditModal(sub)} className="p-1.5 rounded-md bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors" title="Edit Module">
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+              <button onClick={() => setCategoryToDelete({id: sub.id, name: sub.name})} className="p-1.5 rounded-md bg-white/5 hover:bg-rose-500/20 text-gray-400 hover:text-rose-400 transition-colors" title="Delete Module">
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Topics (3rd Level) */}
+        {sub.children && sub.children.length > 0 && expandedCategories.includes(sub.id) && (
+          <div className="mt-2 pl-12 space-y-2">
+            {sub.children.map(topic => (
+              <Fragment key={topic.id}>
+                {renderTopic(topic)}
+              </Fragment>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderTopic = (topic: Category) => {
+    return (
+      <div key={topic.id} className="flex items-center justify-between p-2 rounded-lg bg-slate-900/30 border border-white/5 group/topic">
+        <div className="flex items-center gap-3">
+          <CornerDownRight className={`w-4 h-4 ${!topic.is_active ? 'text-gray-700' : 'text-gray-600'}`} />
+          <div>
+            <p className={`text-sm flex items-center gap-2 ${!topic.is_active ? 'text-gray-500' : 'text-gray-300'}`}>
+              <span className={!topic.is_active ? 'line-through' : ''}>{topic.name}</span>
+              {topic.target_year && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Year {topic.target_year}</span>}
+              {!topic.is_active && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-400 border border-rose-500/20">Hidden</span>}
+            </p>
+            <p className="text-xs text-gray-500">{topic.description || 'No description'} • {countTotalQuestions(topic)} Questions</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5">
+          {/* Pinned indicator visible always */}
+          {isMounted && pinnedCategoryIds.includes(topic.id) && (
+            <button onClick={() => togglePin(topic.id)} className="p-1.5 rounded-md bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors" title="Unpin Category">
+              <Pin className="w-3.5 h-3.5 rotate-[45deg] fill-emerald-400" />
+            </button>
+          )}
+          <div className="flex items-center gap-1.5 opacity-0 group-hover/topic:opacity-100 transition-opacity">
+            {isMounted && !pinnedCategoryIds.includes(topic.id) && (
+              <button onClick={() => togglePin(topic.id)} className="p-1.5 rounded-md bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors">
+                <Pin className="w-3.5 h-3.5 rotate-[45deg]" />
+              </button>
+            )}
+            <button onClick={() => handleToggleActive(topic)} className={`p-1.5 rounded-md transition-colors ${topic.is_active ? 'bg-white/5 hover:bg-amber-500/20 text-gray-400 hover:text-amber-400' : 'bg-rose-500/10 text-rose-400 hover:bg-emerald-500/20 hover:text-emerald-400'}`}>
+              {topic.is_active ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+            </button>
+            <button onClick={() => router.push(`/admin/questions/new?categoryId=${topic.id}`)} className="p-1.5 rounded-md bg-white/5 hover:bg-emerald-500/20 text-gray-400 hover:text-emerald-400 transition-colors">
+              <Plus className="w-3.5 h-3.5" />
+            </button>
+            <button onClick={() => router.push(`/admin/questions?importCategoryId=${topic.id}`)} className="p-1.5 rounded-md bg-white/5 hover:bg-emerald-500/20 text-gray-400 hover:text-emerald-400 transition-colors">
+              <Upload className="w-3.5 h-3.5" />
+            </button>
+            <button onClick={() => openEditModal(topic)} className="p-1.5 rounded-md bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors">
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+            <button onClick={() => setCategoryToDelete({id: topic.id, name: topic.name})} className="p-1.5 rounded-md bg-white/5 hover:bg-rose-500/20 text-gray-400 hover:text-rose-400 transition-colors">
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   };
   
   // Modal State
@@ -237,6 +525,32 @@ export default function AdminCategoriesPage() {
         </div>
       </div>
 
+      {/* Pinned Categories Section */}
+      {isMounted && pinnedCategoryIds.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 text-sm font-semibold text-emerald-400">
+            <Pin className="w-4 h-4 fill-emerald-400 rotate-[45deg]" />
+            <h2>Pinned Categories</h2>
+          </div>
+          <div className="glass-card divide-y divide-white/5">
+            {pinnedCategoryIds.map(id => {
+              const matched = findCategoryAndPath(categories, id);
+              if (!matched) return null;
+              const { category } = matched;
+              const level = getCategoryLevel(category);
+              
+              if (level === 'module') {
+                return renderModule(category);
+              } else if (level === 'sub') {
+                return renderSubcategory(category);
+              } else {
+                return renderTopic(category);
+              }
+            })}
+          </div>
+        </div>
+      )}
+
       <div className="glass-card overflow-hidden">
         {categories.length === 0 ? (
           <div className="p-8 text-center text-gray-500">
@@ -250,160 +564,9 @@ export default function AdminCategoriesPage() {
               if (yearFilter === 'Global') return !c.target_year;
               return c.target_year === parseInt(yearFilter);
             }).map((module) => (
-              <div key={module.id} className="p-4 hover:bg-white/5 transition-colors group">
-                {/* Top-Level Module Row */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className={`w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center border border-blue-500/20 overflow-hidden text-2xl ${!module.is_active ? 'opacity-40 grayscale' : ''}`}>
-                      {module.icon?.startsWith('/') ? (
-                        <img src={`http://localhost:8000${module.icon}`} alt={module.name} className="w-full h-full object-cover" />
-                      ) : (
-                        module.icon || <ImageIcon className="w-5 h-5 text-blue-400" />
-                      )}
-                    </div>
-                    <div>
-                      <h3 className={`font-semibold flex items-center gap-2 ${!module.is_active ? 'text-gray-500' : 'text-white'}`}>
-                        {module.children && module.children.length > 0 && (
-                          <button onClick={() => toggleExpand(module.id)} className="p-0.5 hover:bg-white/10 rounded-md transition-colors text-gray-400">
-                            {expandedCategories.includes(module.id) ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                          </button>
-                        )}
-                        <span className={!module.is_active ? 'line-through' : ''}>{module.name}</span>
-                        {module.target_year && (
-                          <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/20">
-                            Year {module.target_year}
-                          </span>
-                        )}
-                        <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-white/10 text-gray-400">
-                          ID: {module.id}
-                        </span>
-                        {!module.is_active && (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/20">
-                            Hidden
-                          </span>
-                        )}
-                      </h3>
-                      <p className="text-xs text-gray-400 mt-0.5">
-                        {module.description || 'No description provided'} • {countTotalQuestions(module)} Questions
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={() => handleToggleActive(module)} className={`p-2 rounded-lg transition-colors ${module.is_active ? 'bg-white/5 hover:bg-amber-500/20 text-gray-400 hover:text-amber-400' : 'bg-rose-500/10 text-rose-400 hover:bg-emerald-500/20 hover:text-emerald-400'}`} title={module.is_active ? "Hide Module" : "Show Module"}>
-                      {module.is_active ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-                    </button>
-                    <button onClick={() => router.push(`/admin/questions/new?categoryId=${module.id}`)} className="p-2 rounded-lg bg-white/5 hover:bg-emerald-500/20 text-gray-400 hover:text-emerald-400 transition-colors" title="Create Question">
-                      <Plus className="w-4 h-4" />
-                    </button>
-                    <button onClick={() => openAddSubcategoryModal(module)} className="p-2 rounded-lg bg-white/5 hover:bg-emerald-500/20 text-gray-400 hover:text-emerald-400 transition-colors" title="Add Subcategory">
-                      <FolderPlus className="w-4 h-4" />
-                    </button>
-                    <button onClick={() => router.push(`/admin/questions?importCategoryId=${module.id}`)} className="p-2 rounded-lg bg-white/5 hover:bg-emerald-500/20 text-gray-400 hover:text-emerald-400 transition-colors" title="Import Questions">
-                      <Upload className="w-4 h-4" />
-                    </button>
-                    <button onClick={() => openEditModal(module)} className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors" title="Edit Module">
-                      <Pencil className="w-4 h-4" />
-                    </button>
-                    <button onClick={() => setCategoryToDelete({id: module.id, name: module.name})} className="p-2 rounded-lg bg-white/5 hover:bg-rose-500/20 text-gray-400 hover:text-rose-400 transition-colors" title="Delete Module">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Subcategories */}
-                {module.children && module.children.length > 0 && expandedCategories.includes(module.id) && (
-                  <div className="mt-3 pl-14 space-y-2">
-                    {module.children.map(sub => (
-                      <Fragment key={sub.id}>
-                        <div className="flex items-center justify-between p-3 rounded-lg bg-slate-900/50 border border-white/5 group/sub">
-                          <div className="flex items-center gap-3">
-                          <CornerDownRight className={`w-4 h-4 ${!sub.is_active ? 'text-gray-700' : 'text-gray-600'}`} />
-                          <div>
-                            <p className={`text-sm font-medium flex items-center gap-2 ${!sub.is_active ? 'text-gray-500' : 'text-gray-200'}`}>
-                              {sub.children && sub.children.length > 0 && (
-                                <button onClick={() => toggleExpand(sub.id)} className="p-0.5 hover:bg-white/10 rounded-md transition-colors text-gray-400">
-                                  {expandedCategories.includes(sub.id) ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                                </button>
-                              )}
-                              <span className={!sub.is_active ? 'line-through' : ''}>{sub.name}</span>
-                              {sub.target_year && (
-                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                                  Year {sub.target_year}
-                                </span>
-                              )}
-                              {!sub.is_active && (
-                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-400 border border-rose-500/20">
-                                  Hidden
-                                </span>
-                              )}
-                            </p>
-                            <p className="text-xs text-gray-500">{sub.description || 'No description'} • {countTotalQuestions(sub)} Questions</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2 opacity-0 group-hover/sub:opacity-100 transition-opacity">
-                          <button onClick={() => handleToggleActive(sub)} className={`p-1.5 rounded-md transition-colors ${sub.is_active ? 'bg-white/5 hover:bg-amber-500/20 text-gray-400 hover:text-amber-400' : 'bg-rose-500/10 text-rose-400 hover:bg-emerald-500/20 hover:text-emerald-400'}`} title={sub.is_active ? "Hide Module" : "Show Module"}>
-                            {sub.is_active ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-                          </button>
-                          <button onClick={() => router.push(`/admin/questions/new?categoryId=${sub.id}`)} className="p-1.5 rounded-md bg-white/5 hover:bg-emerald-500/20 text-gray-400 hover:text-emerald-400 transition-colors" title="Create Question">
-                            <Plus className="w-3.5 h-3.5" />
-                          </button>
-                          <button onClick={() => openAddSubcategoryModal(sub)} className="p-1.5 rounded-md bg-white/5 hover:bg-emerald-500/20 text-gray-400 hover:text-emerald-400 transition-colors" title="Add Topic/Subcategory">
-                            <FolderPlus className="w-3.5 h-3.5" />
-                          </button>
-                          <button onClick={() => router.push(`/admin/questions?importCategoryId=${sub.id}`)} className="p-1.5 rounded-md bg-white/5 hover:bg-emerald-500/20 text-gray-400 hover:text-emerald-400 transition-colors" title="Import Questions">
-                            <Upload className="w-3.5 h-3.5" />
-                          </button>
-                          <button onClick={() => openEditModal(sub)} className="p-1.5 rounded-md bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors" title="Edit Module">
-                            <Pencil className="w-3.5 h-3.5" />
-                          </button>
-                          <button onClick={() => setCategoryToDelete({id: sub.id, name: sub.name})} className="p-1.5 rounded-md bg-white/5 hover:bg-rose-500/20 text-gray-400 hover:text-rose-400 transition-colors" title="Delete Module">
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                      
-                      {/* Topics (3rd Level) */}
-                      {sub.children && sub.children.length > 0 && expandedCategories.includes(sub.id) && (
-                        <div className="mt-2 pl-12 space-y-2">
-                          {sub.children.map(topic => (
-                            <div key={topic.id} className="flex items-center justify-between p-2 rounded-lg bg-slate-900/30 border border-white/5 group/topic">
-                              <div className="flex items-center gap-3">
-                                <CornerDownRight className={`w-4 h-4 ${!topic.is_active ? 'text-gray-700' : 'text-gray-600'}`} />
-                                <div>
-                                  <p className={`text-sm flex items-center gap-2 ${!topic.is_active ? 'text-gray-500' : 'text-gray-300'}`}>
-                                    <span className={!topic.is_active ? 'line-through' : ''}>{topic.name}</span>
-                                    {topic.target_year && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Year {topic.target_year}</span>}
-                                    {!topic.is_active && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-400 border border-rose-500/20">Hidden</span>}
-                                  </p>
-                                  <p className="text-xs text-gray-500">{topic.description || 'No description'} • {countTotalQuestions(topic)} Questions</p>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2 opacity-0 group-hover/topic:opacity-100 transition-opacity">
-                                <button onClick={() => handleToggleActive(topic)} className={`p-1.5 rounded-md transition-colors ${topic.is_active ? 'bg-white/5 hover:bg-amber-500/20 text-gray-400 hover:text-amber-400' : 'bg-rose-500/10 text-rose-400 hover:bg-emerald-500/20 hover:text-emerald-400'}`}>
-                                  {topic.is_active ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-                                </button>
-                                <button onClick={() => router.push(`/admin/questions/new?categoryId=${topic.id}`)} className="p-1.5 rounded-md bg-white/5 hover:bg-emerald-500/20 text-gray-400 hover:text-emerald-400 transition-colors">
-                                  <Plus className="w-3.5 h-3.5" />
-                                </button>
-                                <button onClick={() => router.push(`/admin/questions?importCategoryId=${topic.id}`)} className="p-1.5 rounded-md bg-white/5 hover:bg-emerald-500/20 text-gray-400 hover:text-emerald-400 transition-colors">
-                                  <Upload className="w-3.5 h-3.5" />
-                                </button>
-                                <button onClick={() => openEditModal(topic)} className="p-1.5 rounded-md bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors">
-                                  <Pencil className="w-3.5 h-3.5" />
-                                </button>
-                                <button onClick={() => setCategoryToDelete({id: topic.id, name: topic.name})} className="p-1.5 rounded-md bg-white/5 hover:bg-rose-500/20 text-gray-400 hover:text-rose-400 transition-colors">
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </Fragment>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <Fragment key={module.id}>
+                {renderModule(module)}
+              </Fragment>
             ))}
           </div>
         )}

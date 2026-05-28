@@ -344,14 +344,14 @@ export default function QuizGeneratorPage() {
             <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
               <CheckCircle className="w-5 h-5 text-purple-400" /> 3. Select Topics
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
+            <div className={selectedBlocks.length === 1 ? "w-full" : "grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6"}>
               {categories.filter(c => selectedBlocks.includes(c.id)).map(block => (
                 <div key={block.id} className="space-y-3">
                   <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider border-b border-white/10 pb-2">{block.name}</h3>
-                  <div className="space-y-2">
+                  <div className={selectedBlocks.length === 1 ? "grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2" : "space-y-2"}>
                     {block.children?.map(topic => renderTopicItem(topic, 0))}
                     {(!block.children || block.children.length === 0) && (
-                      <p className="text-sm text-gray-500 italic">No sub-topics available.</p>
+                      <p className="text-sm text-gray-500 italic col-span-full">No sub-topics available.</p>
                     )}
                   </div>
                 </div>

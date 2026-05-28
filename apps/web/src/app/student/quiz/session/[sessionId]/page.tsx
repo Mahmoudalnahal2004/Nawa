@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import api from '@/lib/api';
 import { toast } from 'sonner';
-import { ArrowRight, ArrowLeft, CheckCircle, XCircle, Loader2, Trophy, RotateCcw, Home, ChevronRight, PenTool, StickyNote, Eraser, Save, Flag, Search, Clock, Menu, Bookmark, Pause, Play } from 'lucide-react';
+import { ArrowRight, ArrowLeft, CheckCircle, XCircle, Loader2, Trophy, RotateCcw, Home, ChevronRight, PenTool, StickyNote, Eraser, Save, Flag, Search, Clock, Menu, Bookmark, Pause, Play, ShieldAlert } from 'lucide-react';
 
 interface QuizQuestion {
   id: number;
@@ -52,6 +52,7 @@ export default function QuizSessionPage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   
   const [submitting, setSubmitting] = useState(false);
+  const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
   const [quizComplete, setQuizComplete] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -83,7 +84,7 @@ export default function QuizSessionPage() {
       const timer = setInterval(() => setTimeLeft(prev => (prev && prev > 0 ? prev - 1 : 0)), 1000);
       return () => clearInterval(timer);
     } else if (mode === 'exam' && timeLeft === 0 && !quizComplete) {
-      submitExam(); // auto submit when time's up
+      performFinalSubmit(); // auto submit when time's up
     }
   }, [mode, timeLeft, quizComplete, isTimerPaused]);
 
@@ -258,16 +259,9 @@ export default function QuizSessionPage() {
     }
   };
 
-  const submitExam = async () => {
+  const performFinalSubmit = async () => {
     if (submitting) return;
-    
-    const unansweredCount = questions.filter(q => (mode === 'exam' ? !examAnswers[q.id] : false)).length;
-    if (mode === 'exam' && timeLeft !== 0 && unansweredCount > 0) {
-      if (!window.confirm(`You have ${unansweredCount} unanswered questions. Are you sure you want to submit?`)) {
-        return;
-      }
-    }
-
+    setShowSubmitConfirm(false);
     setSubmitting(true);
     try {
       if (mode === 'exam') {
@@ -285,6 +279,10 @@ export default function QuizSessionPage() {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const triggerSubmitConfirmation = () => {
+    setShowSubmitConfirm(true);
   };
 
   const toggleBookmark = async () => {
@@ -327,7 +325,7 @@ export default function QuizSessionPage() {
     }
 
     if (currentIndex + 1 >= questions.length) {
-      submitExam();
+      triggerSubmitConfirmation();
     } else {
       setCurrentIndex(prev => prev + 1);
     }
@@ -343,6 +341,7 @@ export default function QuizSessionPage() {
 
 
 
+  const unansweredCount = questions.filter(q => (mode === 'exam' ? !examAnswers[q.id] : false)).length;
   const question = questions[currentIndex];
   const options = [
     { label: 'A', text: question.option_a },
@@ -589,7 +588,7 @@ export default function QuizSessionPage() {
                 <button onClick={previousQuestion} disabled={currentIndex === 0} className={`flex items-center gap-2 px-6 py-2.5 rounded-lg font-medium transition-all ${currentIndex === 0 ? 'bg-slate-800/50 text-gray-600 cursor-not-allowed' : 'bg-slate-800 text-gray-300 hover:bg-slate-700 hover:text-white'}`}>
                   <ArrowLeft className="w-4 h-4" /> Previous
                 </button>
-                <button onClick={currentIndex + 1 >= questions.length ? submitExam : nextQuestion} className="btn-primary flex items-center gap-2 px-6 py-2.5 shadow-lg shadow-emerald-500/20">
+                <button onClick={currentIndex + 1 >= questions.length ? triggerSubmitConfirmation : nextQuestion} className="btn-primary flex items-center gap-2 px-6 py-2.5 shadow-lg shadow-emerald-500/20">
                   {currentIndex + 1 >= questions.length ? 'Submit' : 'Next Question'} <ArrowRight className="w-4 h-4" />
                 </button>
               </div>
@@ -621,6 +620,73 @@ export default function QuizSessionPage() {
           </div>
         </div>
       </div>
+
+      {showSubmitConfirm && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full shadow-2xl p-6 animate-scale-in">
+            <div className="flex items-center gap-3 text-amber-400 mb-4">
+              <ShieldAlert className="w-8 h-8" />
+              <h3 className="text-xl font-bold text-white">
+                {mode === 'exam' ? 'Submit Exam?' : 'Finish Quiz?'}
+              </h3>
+            </div>
+            
+            <div className="text-gray-300 text-sm mb-6 leading-relaxed">
+              {mode === 'exam' ? (
+                <div className="space-y-3">
+                  <p>
+                    You have completed <span className="font-semibold text-white">{questions.length - unansweredCount}</span> out of <span className="font-semibold text-white">{questions.length}</span> questions.
+                  </p>
+                  {unansweredCount > 0 ? (
+                    <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-xl font-medium flex gap-2.5 items-start">
+                      <span className="text-base shrink-0 mt-0.5">⚠️</span>
+                      <p className="text-xs leading-normal">
+                        Warning: You have {unansweredCount} unanswered {unansweredCount === 1 ? 'question' : 'questions'}. Are you sure you want to submit?
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-xl font-medium flex gap-2.5 items-start">
+                      <span className="text-base shrink-0 mt-0.5">✓</span>
+                      <p className="text-xs leading-normal">
+                        All questions have been answered. Are you sure you want to submit?
+                      </p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p>Are you sure you want to finish and submit this quiz session?</p>
+              )}
+            </div>
+            
+            <div className="flex items-center gap-3 justify-end">
+              <button
+                onClick={() => setShowSubmitConfirm(false)}
+                className="px-4 py-2.5 rounded-lg border border-slate-700 bg-slate-800 text-gray-300 hover:bg-slate-700 hover:text-white transition-colors text-sm font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={performFinalSubmit}
+                disabled={submitting}
+                className={`px-5 py-2.5 rounded-lg text-white text-sm font-semibold transition-all flex items-center gap-2 ${
+                  unansweredCount > 0 && mode === 'exam'
+                    ? 'bg-rose-600 hover:bg-rose-500 shadow-lg shadow-rose-600/20'
+                    : 'bg-emerald-600 hover:bg-emerald-500 shadow-lg shadow-emerald-600/20'
+                }`}
+              >
+                {submitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Submitting...
+                  </>
+                ) : (
+                  'Yes, Submit'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

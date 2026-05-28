@@ -9,51 +9,41 @@ const api = axios.create({
   },
 });
 
-// Request interceptor: attach JWT token
-api.interceptors.request.use((config) => {
+// Request interceptor: attach JWT token dynamically
+api.interceptors.request.use(async (config) => {
   if (typeof window !== 'undefined') {
-    const token = localStorage.getItem('access_token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    try {
+      const { supabase } = await import('./supabase');
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      } else {
+        // Fallback for legacy local JWT token
+        const localToken = localStorage.getItem('access_token');
+        if (localToken) {
+          config.headers.Authorization = `Bearer ${localToken}`;
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching session in api interceptor:', err);
     }
   }
   return config;
 });
 
-// Response interceptor: handle 401 and token refresh
+// Response interceptor: handle 401 unauthorized
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    const originalRequest = error.config;
-
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true;
-
-      try {
-        const refreshToken = localStorage.getItem('refresh_token');
-        if (refreshToken) {
-          const res = await axios.post(`${API_BASE}/api/v1/auth/refresh`, {
-            refresh_token: refreshToken,
-          });
-
-          const { access_token, refresh_token: newRefresh } = res.data;
-          localStorage.setItem('access_token', access_token);
-          localStorage.setItem('refresh_token', newRefresh);
-
-          originalRequest.headers.Authorization = `Bearer ${access_token}`;
-          return api(originalRequest);
-        }
-      } catch {
-        // Refresh failed — clear tokens and redirect to login
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-        localStorage.removeItem('user');
-        if (typeof window !== 'undefined') {
-          window.location.href = '/login';
-        }
+    if (error.response?.status === 401) {
+      // Clear storage and redirect to login
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('user');
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login';
       }
     }
-
     return Promise.reject(error);
   }
 );

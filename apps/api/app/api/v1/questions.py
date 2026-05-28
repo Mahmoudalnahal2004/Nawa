@@ -24,7 +24,7 @@ async def bulk_update_status(data: BulkStatusUpdate, db: AsyncSession = Depends(
 
 @router.get("", response_model=QuestionListResponse, dependencies=[Depends(admin_only)])
 async def list_questions(
-    page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100),
+    page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=10000),
     status_filter: Optional[str] = Query(None, alias="status"),
     category_id: Optional[int] = None, search: Optional[str] = None,
     difficulty: Optional[str] = None, target_year: Optional[str] = None,

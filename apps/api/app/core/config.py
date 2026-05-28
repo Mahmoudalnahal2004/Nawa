@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str | None = None
     FRONTEND_URL: str = "http://localhost:3200"
 
+    # Supabase
+    SUPABASE_URL: str | None = None
+    SUPABASE_ANON_KEY: str | None = None
+
     class Config:
         env_file = ".env"
         case_sensitive = True

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { isAuthenticated, getStoredUser, clearAuth } from '@/lib/auth';
+import { useAuth } from '@/lib/auth-context';
 import {
   LayoutDashboard, AlertTriangle, LogOut, Menu, X, Stethoscope, ChevronRight, BookOpen, UserCircle2, History, Trophy, Flame, Home, NotepadText, Crown
 } from 'lucide-react';
@@ -22,25 +22,23 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
   const router = useRouter();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [user, setUser] = useState<any>(null);
+  const { user, signOut } = useAuth();
   const [streak, setStreak] = useState(0);
 
   useEffect(() => {
-    if (!isAuthenticated()) { router.push('/login'); return; }
-    const u = getStoredUser();
-    if (u?.role !== 'student' && u?.role !== 'admin') { router.push('/login'); return; }
-    setUser(u);
-    // Fetch streak from backend
-    import('@/lib/api').then(mod => {
-      mod.default.get('/users/me').then((res: any) => {
-        setStreak(res.data.current_streak || 0);
-      }).catch(() => {});
-    });
-  }, [router]);
+    if (user) {
+      // Fetch streak from backend
+      import('@/lib/api').then(mod => {
+        mod.default.get('/users/me').then((res: any) => {
+          setStreak(res.data.current_streak || 0);
+        }).catch(() => {});
+      });
+    }
+  }, [user]);
 
-  const handleLogout = () => { clearAuth(); router.push('/login'); };
+  const handleLogout = () => { signOut(); };
 
-  if (!user) return null;
+  if (!user || (user.role !== 'student' && user.role !== 'admin')) return null;
 
   return (
     <div className="min-h-screen bg-navy-950 flex">

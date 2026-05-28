@@ -25,36 +25,125 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             await session.close()
 
 
+import time
+import urllib.request
+import json
+from jose import jwt, JWTError
+from app.core.config import settings
+
+_jwks_cache = None
+_jwks_cache_expiry = 0
+
+def fetch_jwks(supabase_url: str):
+    global _jwks_cache, _jwks_cache_expiry
+    now = time.time()
+    if _jwks_cache is not None and now < _jwks_cache_expiry:
+        return _jwks_cache
+        
+    try:
+        url = f"{supabase_url.rstrip('/')}/jwt/v1/jwks"
+        req = urllib.request.Request(url)
+        with urllib.request.urlopen(req, timeout=5) as response:
+            if response.status == 200:
+                _jwks_cache = json.loads(response.read().decode())
+                _jwks_cache_expiry = now + 3600  # Cache for 1 hour
+                return _jwks_cache
+    except Exception as e:
+        print(f"Error fetching JWKS from Supabase: {e}")
+        if _jwks_cache is not None:
+            return _jwks_cache
+    return None
+
+def verify_supabase_jwt(token: str) -> dict | None:
+    supabase_url = getattr(settings, "SUPABASE_URL", None)
+    if not supabase_url:
+        return None
+        
+    jwks = fetch_jwks(supabase_url)
+    if not jwks:
+        return None
+        
+    try:
+        unverified_header = jwt.get_unverified_header(token)
+        kid = unverified_header.get("kid")
+        if not kid:
+            return None
+            
+        key = None
+        for k in jwks.get("keys", []):
+            if k.get("kid") == kid:
+                key = k
+                break
+                
+        if not key:
+            return None
+            
+        payload = jwt.decode(
+            token,
+            key,
+            algorithms=["RS256"],
+            audience="authenticated",
+        )
+        return payload
+    except Exception as e:
+        # Silent error in production, but print in debug mode
+        if settings.DEBUG:
+            print(f"Supabase JWT verification failed: {e}")
+        return None
+
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    """Extract and validate the current user from the JWT token."""
+    """Extract and validate the current user from the JWT token (supports Supabase & fallback local JWT)."""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
 
+    # 1. Try Supabase JWT verification first (primary path)
+    supabase_payload = verify_supabase_jwt(token)
+    if supabase_payload is not None:
+        supabase_user_id = supabase_payload.get("sub")
+        email = supabase_payload.get("email")
+        if supabase_user_id:
+            # Query by supabase_user_id
+            result = await db.execute(select(User).where(User.supabase_user_id == supabase_user_id))
+            user = result.scalar_one_or_none()
+            if user is not None:
+                return user
+                
+            # Fallback to query by email if user existed but supabase_user_id is not yet set
+            if email:
+                result = await db.execute(select(User).where(User.email == email))
+                user = result.scalar_one_or_none()
+                if user is not None:
+                    # Link user dynamically
+                    user.supabase_user_id = supabase_user_id
+                    await db.commit()
+                    await db.refresh(user)
+                    return user
+            
+            # User does not exist locally yet. They must hit the `/auth/sync-profile` route first.
+            raise credentials_exception
+
+    # 2. Fallback to custom local JWT verification (temporary migration path)
     payload = decode_token(token)
-    if payload is None:
-        raise credentials_exception
+    if payload is not None:
+        token_type = payload.get("type")
+        if token_type == "access":
+            user_id = payload.get("sub")
+            if user_id is not None:
+                try:
+                    result = await db.execute(select(User).where(User.id == int(user_id)))
+                    user = result.scalar_one_or_none()
+                    if user is not None:
+                        return user
+                except ValueError:
+                    pass
 
-    token_type = payload.get("type")
-    if token_type != "access":
-        raise credentials_exception
-
-    user_id: str = payload.get("sub")
-    if user_id is None:
-        raise credentials_exception
-
-    result = await db.execute(select(User).where(User.id == int(user_id)))
-    user = result.scalar_one_or_none()
-
-    if user is None:
-        raise credentials_exception
-
-    return user
+    raise credentials_exception
 
 
 async def get_current_active_user(

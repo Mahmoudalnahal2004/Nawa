@@ -35,147 +35,18 @@ interface PdfImportPreviewModalProps {
   onClose: () => void;
   onSuccess: () => void;
   initialQuestions: any[];
+  defaultCategoryId?: number;
 }
 
-// Self-contained tree selector for categories to keep main render fast
-function CategorySelect({ 
-  categories, 
-  value, 
-  onChange 
-}: { 
-  categories: Category[]; 
-  value: number; 
-  onChange: (val: number) => void;
-}) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [expandedYears, setExpandedYears] = useState<Record<number, boolean>>({});
-  const [expandedMainCats, setExpandedMainCats] = useState<Record<number, boolean>>({});
+import { CategorySelect } from './CategorySelect';
 
-  const selectedCat = categories.find(c => c.id === value);
-  const selectedCatName = selectedCat ? selectedCat.name : 'Select category';
-
-  const renderCategoryTree = (catsToRender: Category[]) => {
-    const mainCats = catsToRender.filter(c => c.parent_id === null).sort((a, b) => a.name.localeCompare(b.name));
-    return mainCats.map(mainCat => {
-      const subCats = categories.filter(sub => sub.parent_id === mainCat.id).sort((a, b) => a.name.localeCompare(b.name));
-      const isMainExpanded = expandedMainCats[mainCat.id];
-      return (
-        <div key={mainCat.id}>
-          <div className="flex items-stretch">
-            {subCats.length > 0 ? (
-              <div
-                className="pl-4 pr-1 flex items-center justify-center cursor-pointer hover:bg-white/5 text-gray-400"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setExpandedMainCats(prev => ({ ...prev, [mainCat.id]: !prev[mainCat.id] }));
-                }}
-              >
-                {isMainExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRightIcon className="w-3.5 h-3.5" />}
-              </div>
-            ) : (
-              <div className="pl-4 pr-1 w-8 flex items-center justify-center"></div>
-            )}
-            <div
-              className={`flex-1 pr-4 py-1.5 text-xs cursor-pointer transition-colors flex justify-between items-center ${value === mainCat.id ? 'text-emerald-400 bg-emerald-500/10' : 'text-gray-300 hover:bg-white/5'}`}
-              onClick={() => {
-                onChange(mainCat.id);
-                setIsOpen(false);
-              }}
-            >
-              {mainCat.name}
-              {value === mainCat.id && <Check className="w-3.5 h-3.5" />}
-            </div>
-          </div>
-          {isMainExpanded && subCats.length > 0 && (
-            <div className="mb-1 bg-black/20">
-              {subCats.map(subCat => (
-                <div
-                  key={subCat.id}
-                  className={`pl-10 pr-4 py-1.5 text-xs cursor-pointer transition-colors flex justify-between items-center ${value === subCat.id ? 'text-emerald-400 bg-emerald-500/10' : 'text-gray-400 hover:text-gray-300 hover:bg-white/5'}`}
-                  onClick={() => {
-                    onChange(subCat.id);
-                    setIsOpen(false);
-                  }}
-                >
-                  {subCat.name}
-                  {value === subCat.id && <Check className="w-3.5 h-3.5" />}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      );
-    });
-  };
-
-  return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex justify-between items-center text-left bg-slate-800 border border-slate-700/60 hover:border-slate-600 rounded-lg px-3 py-2 text-xs text-white outline-none transition-colors"
-      >
-        <span className={value === 0 ? "text-gray-400 truncate" : "text-white font-medium truncate"}>
-          {selectedCatName}
-        </span>
-        <ChevronDown className={`w-3.5 h-3.5 text-gray-400 shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-      </button>
-
-      {isOpen && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
-          <div className="absolute z-50 mt-1 w-full max-h-60 overflow-y-auto bg-slate-900 border border-white/10 rounded-lg shadow-2xl py-1 scrollbar-thin">
-            {[1, 2, 3, 4, 5].map(year => {
-              const yearCats = categories.filter(c => c.target_year === year);
-              if (yearCats.length === 0) return null;
-              const isExpanded = expandedYears[year];
-              return (
-                <div key={year} className="mb-0.5">
-                  <div
-                    className="px-3 py-1.5 flex items-center gap-1.5 cursor-pointer hover:bg-white/5 text-emerald-400 font-semibold text-xs transition-colors"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setExpandedYears(prev => ({ ...prev, [year]: !prev[year] }));
-                    }}
-                  >
-                    {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRightIcon className="w-3 h-3" />}
-                    Year {year}
-                  </div>
-                  {isExpanded && (
-                    <div className="mb-0.5">
-                      {renderCategoryTree(yearCats)}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-            {(() => {
-              const otherCats = categories.filter(c => !c.target_year);
-              if (otherCats.length === 0) return null;
-              return (
-                <div className="mb-0.5 mt-1.5 pt-1.5 border-t border-white/5">
-                  <div className="px-3 py-1.5 flex items-center gap-1.5 text-emerald-400 font-semibold text-xs">
-                    <div className="w-3 h-3" />
-                    Global / Other
-                  </div>
-                  <div>
-                    {renderCategoryTree(otherCats)}
-                  </div>
-                </div>
-              );
-            })()}
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
 
 export function PdfImportPreviewModal({ 
   isOpen, 
   onClose, 
   onSuccess, 
-  initialQuestions 
+  initialQuestions,
+  defaultCategoryId
 }: PdfImportPreviewModalProps) {
   const [questions, setQuestions] = useState<ParsedQuestion[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -194,6 +65,17 @@ export function PdfImportPreviewModal({
     target_year: '',
     parent_id: 0
   });
+  
+  const [bulkCategoryId, setBulkCategoryId] = useState<number>(0);
+
+  // Initialize bulk category selection from default Category ID
+  useEffect(() => {
+    if (isOpen && defaultCategoryId) {
+      setBulkCategoryId(defaultCategoryId);
+    } else {
+      setBulkCategoryId(0);
+    }
+  }, [isOpen, defaultCategoryId]);
 
   const loadCategories = async () => {
     try {
@@ -236,7 +118,7 @@ export function PdfImportPreviewModal({
       const formatted = initialQuestions.map((q, idx) => ({
         ...q,
         tempId: `parsed-${idx}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        category_id: q.category_id || 0,
+        category_id: q.category_id || defaultCategoryId || 0,
         difficulty: q.difficulty || 'medium',
         explanation: q.explanation || '',
       }));
@@ -246,7 +128,7 @@ export function PdfImportPreviewModal({
       
       loadCategories();
     }
-  }, [isOpen, initialQuestions]);
+  }, [isOpen, initialQuestions, defaultCategoryId]);
 
   const handleQuestionChange = (tempId: string, field: keyof ParsedQuestion, value: any) => {
     setQuestions(prev => prev.map(q => q.tempId === tempId ? { ...q, [field]: value } : q));
@@ -496,8 +378,11 @@ export function PdfImportPreviewModal({
                 </label>
                 <CategorySelect 
                   categories={categories}
-                  value={0}
-                  onChange={handleBulkAssignCategory}
+                  value={bulkCategoryId}
+                  onChange={(val) => {
+                    setBulkCategoryId(val);
+                    handleBulkAssignCategory(val);
+                  }}
                 />
               </div>
 

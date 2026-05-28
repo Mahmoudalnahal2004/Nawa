@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { isAuthenticated, getStoredUser, clearAuth } from '@/lib/auth';
+import { useAuth } from '@/lib/auth-context';
 import {
   LayoutDashboard, FileQuestion, FolderTree, Users, LogOut,
   Menu, X, Stethoscope, ChevronRight, Settings, BookOpen, ShieldCheck
@@ -22,27 +22,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const router = useRouter();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [user, setUser] = useState<any>(null);
-
-  useEffect(() => {
-    if (!isAuthenticated()) {
-      router.push('/login');
-      return;
-    }
-    const u = getStoredUser();
-    if (u?.role !== 'admin') {
-      router.push('/student/dashboard');
-      return;
-    }
-    setUser(u);
-  }, [router]);
+  const { user, signOut } = useAuth();
 
   const handleLogout = () => {
-    clearAuth();
-    router.push('/login');
+    signOut();
   };
 
-  if (!user) return null;
+  if (!user || user.role !== 'admin') return null;
 
   return (
     <div className="min-h-screen bg-navy-950 flex">

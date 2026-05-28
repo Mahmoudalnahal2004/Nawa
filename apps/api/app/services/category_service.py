@@ -166,17 +166,36 @@ async def update_category(db: AsyncSession, category_id: int, data: CategoryUpda
 
 
 async def delete_category(db: AsyncSession, category_id: int, password: str | None = None) -> tuple[bool, str]:
-    """Delete a category if it has no questions, or if the correct password is provided."""
-    # Check for questions
+    """Delete a category and all its descendants if it has no questions, or if the correct password is provided."""
+    # Fetch all categories to resolve descendants in memory
+    result = await db.execute(select(Category))
+    all_categories = result.scalars().all()
+
+    descendant_ids = []
+    def traverse(parent_id: int):
+        for cat in all_categories:
+            if cat.parent_id == parent_id:
+                descendant_ids.append(cat.id)
+                traverse(cat.id)
+
+    traverse(category_id)
+    all_target_ids = [category_id] + descendant_ids
+
+    # Check for questions in the category or any of its descendants
     q_count = await db.execute(
-        select(func.count(Question.id)).where(Question.category_id == category_id)
+        select(func.count(Question.id)).where(Question.category_id.in_(all_target_ids))
     )
     if q_count.scalar_one() > 0:
         if password != "0000":
             return False, "Cannot delete category with existing questions. Please provide the correct password."
-        # If password is correct, delete the questions first
-        await db.execute(delete(Question).where(Question.category_id == category_id))
+        # If password is correct, delete all descendant/category questions first
+        await db.execute(delete(Question).where(Question.category_id.in_(all_target_ids)))
 
+    # Delete descendants first to avoid constraint/orphan issues
+    if descendant_ids:
+        await db.execute(delete(Category).where(Category.id.in_(descendant_ids)))
+
+    # Delete the category itself
     await db.execute(delete(Category).where(Category.id == category_id))
     await db.flush()
     return True, "Category deleted"
