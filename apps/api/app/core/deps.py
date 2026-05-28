@@ -44,7 +44,7 @@ def fetch_jwks(supabase_url: str):
         return _jwks_cache
         
     try:
-        url = f"{supabase_url.rstrip('/')}/jwt/v1/jwks"
+        url = f"{supabase_url.rstrip('/')}/auth/v1/.well-known/jwks.json"
         req = urllib.request.Request(url)
         with urllib.request.urlopen(req, timeout=5) as response:
             if response.status == 200:
@@ -88,7 +88,7 @@ def verify_supabase_jwt(token: str) -> dict | None:
         payload = jwt.decode(
             token,
             key,
-            algorithms=["RS256"],
+            algorithms=["RS256", "ES256"],
             audience="authenticated",
         )
         return payload
