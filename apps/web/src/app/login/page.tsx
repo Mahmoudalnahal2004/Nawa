@@ -88,12 +88,18 @@ export default function LoginPage() {
           // Sync profile to ensure user exists locally
           try {
             const profile = await refreshProfile();
+            if (!profile) {
+              toast.error('Failed to sync profile with server. Please check your backend connection/settings.');
+              setLoading(false);
+              return;
+            }
             toast.success('Welcome back!');
-            if (profile?.role === 'admin') router.push('/admin/dashboard');
+            if (profile.role === 'admin') router.push('/admin/dashboard');
             else router.push('/student/home');
           } catch (syncErr) {
             console.error('Failed to sync profile on login:', syncErr);
             toast.error('Failed to link your local profile. Please try again.');
+            setLoading(false);
           }
         }
       } else {
@@ -140,6 +146,7 @@ export default function LoginPage() {
           } catch (syncErr) {
             console.error('Failed to sync profile on registration:', syncErr);
             toast.error('Account created, but failed to sync local profile.');
+            setLoading(false);
           }
         } else {
           // If confirmation email is required
