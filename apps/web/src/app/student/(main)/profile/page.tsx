@@ -63,7 +63,6 @@ export default function ProfilePage() {
       await refreshProfile();
       
       toast.success('Profile saved!');
-      window.location.reload();
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Failed to save profile');
     } finally {
