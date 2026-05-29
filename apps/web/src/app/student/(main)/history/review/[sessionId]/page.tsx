@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import api, { API_BASE } from '@/lib/api';
+import api from '@/lib/api';
 import { Loader2, ArrowLeft, CheckCircle, XCircle, Info } from 'lucide-react';
 
 interface QuizQuestion {
@@ -128,7 +128,7 @@ export default function ReviewExamPage() {
 
               {q.image_url && (
                 <div className="mb-8">
-                  <img src={`${API_BASE}${q.image_url}`} alt="Clinical image" className="w-full max-h-80 object-contain rounded-xl bg-black/20" />
+                  <img src={`${process.env.NEXT_PUBLIC_API_URL}${q.image_url}`} alt="Clinical image" className="w-full max-h-80 object-contain rounded-xl bg-black/20" />
                 </div>
               )}
 

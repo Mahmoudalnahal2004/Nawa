@@ -54,49 +54,6 @@ async def seed_super_admin():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application startup/shutdown lifecycle."""
-    # Startup: Initialize DB file from template if running on a persistent volume
-    import shutil
-    db_url = settings.DATABASE_URL
-    if "sqlite" in db_url:
-        try:
-            # Extract path from URL (supports both absolute and relative formats)
-            db_path = db_url.split(":///")[1]
-            db_dir = os.path.dirname(db_path)
-            if db_dir:
-                os.makedirs(db_dir, exist_ok=True)
-                
-            needs_init = False
-            if not os.path.exists(db_path) or os.path.getsize(db_path) <= 1024:
-                needs_init = True
-            else:
-                # Check if the database has data (using sqlite3 directly to avoid sqlalchemy session conflicts)
-                import sqlite3
-                try:
-                    conn = sqlite3.connect(db_path)
-                    c = conn.cursor()
-                    # Check if universities table is empty or doesn't exist
-                    c.execute("SELECT count(*) FROM universities")
-                    count = c.fetchone()[0]
-                    if count == 0:
-                        needs_init = True
-                    conn.close()
-                except Exception:
-                    needs_init = True
-
-            if needs_init:
-                source_candidates = [
-                    "apps/api/nawa_qbank.db",
-                    "nawa_qbank.db",
-                    "/app/apps/api/nawa_qbank.db"
-                ]
-                for src in source_candidates:
-                    if os.path.exists(src) and os.path.getsize(src) > 1024:
-                        shutil.copy(src, db_path)
-                        print(f"[STARTUP] Initialized database volume at {db_path} from template {src}")
-                        break
-        except Exception as e:
-            print(f"[STARTUP] Warning during database volume initialization: {e}")
-
     # Startup: create tables and seed admin
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

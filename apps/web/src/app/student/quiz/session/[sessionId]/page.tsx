@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import api, { API_BASE } from '@/lib/api';
+import api from '@/lib/api';
 import { toast } from 'sonner';
 import { ArrowRight, ArrowLeft, CheckCircle, XCircle, Loader2, Trophy, RotateCcw, Home, ChevronRight, PenTool, StickyNote, Eraser, Save, Flag, Search, Clock, Menu, Bookmark, Pause, Play, ShieldAlert } from 'lucide-react';
 
@@ -527,7 +527,7 @@ export default function QuizSessionPage() {
             
             {question.image_url && (
               <div className="mb-8 rounded-2xl overflow-hidden border border-slate-800 bg-slate-900/50 p-2">
-                <img src={`${API_BASE}${question.image_url}`} alt="Clinical image" className="max-w-full h-auto max-h-96 mx-auto object-contain rounded-xl" />
+                <img src={`${process.env.NEXT_PUBLIC_API_URL}${question.image_url}`} alt="Clinical image" className="max-w-full h-auto max-h-96 mx-auto object-contain rounded-xl" />
               </div>
             )}
 

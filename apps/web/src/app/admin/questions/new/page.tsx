@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import api, { API_BASE } from '@/lib/api';
+import api from '@/lib/api';
 import { toast } from 'sonner';
 import { ArrowLeft, Save, Upload as UploadIcon, Loader2, Bold, Italic, Image as ImageIcon, ChevronDown, ChevronRight, Check } from 'lucide-react';
 import { CategorySelect } from '@/components/admin/CategorySelect';
@@ -112,7 +112,7 @@ export default function NewQuestionPage() {
             <label className="block text-sm font-semibold text-white mb-3">Medical Image (Optional)</label>
             {form.image_url ? (
               <div className="relative">
-                <img src={`${API_BASE}${form.image_url}`} alt="Question" className="w-full rounded-xl max-h-64 object-contain bg-black/20" />
+                <img src={`${process.env.NEXT_PUBLIC_API_URL}${form.image_url}`} alt="Question" className="w-full rounded-xl max-h-64 object-contain bg-black/20" />
                 <button onClick={() => handleChange('image_url', '')} className="absolute top-2 right-2 bg-rose-500 text-white p-1.5 rounded-lg text-xs">Remove</button>
               </div>
             ) : (

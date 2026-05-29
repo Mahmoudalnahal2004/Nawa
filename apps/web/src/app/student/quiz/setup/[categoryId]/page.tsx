@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import api, { API_BASE } from '@/lib/api';
+import api from '@/lib/api';
 import { toast } from 'sonner';
 import { ArrowLeft, Play, Minus, Plus, Loader2, BookOpen, Timer } from 'lucide-react';
 
@@ -75,7 +75,7 @@ export default function QuizSetupPage() {
       <div className="glass-card p-8 text-center">
         <div className="text-5xl mb-4 flex justify-center">
           {category.category_icon?.startsWith('/') ? (
-            <img src={`${API_BASE}${category.category_icon}`} alt={category.category_name} className="h-16 object-contain drop-shadow-xl" />
+            <img src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}${category.category_icon}`} alt={category.category_name} className="h-16 object-contain drop-shadow-xl" />
           ) : (
             category.category_icon
           )}
