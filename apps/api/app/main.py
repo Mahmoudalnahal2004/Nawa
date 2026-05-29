@@ -64,7 +64,26 @@ async def lifespan(app: FastAPI):
             db_dir = os.path.dirname(db_path)
             if db_dir:
                 os.makedirs(db_dir, exist_ok=True)
+                
+            needs_init = False
             if not os.path.exists(db_path) or os.path.getsize(db_path) <= 1024:
+                needs_init = True
+            else:
+                # Check if the database has data (using sqlite3 directly to avoid sqlalchemy session conflicts)
+                import sqlite3
+                try:
+                    conn = sqlite3.connect(db_path)
+                    c = conn.cursor()
+                    # Check if universities table is empty or doesn't exist
+                    c.execute("SELECT count(*) FROM universities")
+                    count = c.fetchone()[0]
+                    if count == 0:
+                        needs_init = True
+                    conn.close()
+                except Exception:
+                    needs_init = True
+
+            if needs_init:
                 source_candidates = [
                     "apps/api/nawa_qbank.db",
                     "nawa_qbank.db",
