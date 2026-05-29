@@ -4,7 +4,11 @@ export const getApiUrl = () => {
   const envUrl = process.env.NEXT_PUBLIC_API_URL;
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname;
-    const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname.startsWith('192.168.');
+    const isLocalhost = hostname === 'localhost' || 
+                        hostname === '127.0.0.1' || 
+                        hostname.startsWith('192.168.') || 
+                        hostname.startsWith('10.') || 
+                        hostname.startsWith('172.');
     if (!isLocalhost && (!envUrl || envUrl.includes('localhost') || envUrl.includes('127.0.0.1'))) {
       return 'https://nawa-production-be9b.up.railway.app';
     }
