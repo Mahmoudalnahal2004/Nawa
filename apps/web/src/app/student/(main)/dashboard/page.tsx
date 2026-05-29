@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import api from '@/lib/api';
+import api, { API_BASE } from '@/lib/api';
 import { toast } from 'sonner';
 import { Loader2, CheckCircle, ChevronRight, ChevronDown, Layers, Layout, ShieldAlert, LayoutGrid, List } from 'lucide-react';
 
@@ -290,7 +290,7 @@ export default function QuizGeneratorPage() {
                   >
                     <div className="flex-1 w-full relative flex items-center justify-center bg-white/5 overflow-hidden">
                       {block.icon?.startsWith('/') ? (
-                        <img src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}${block.icon}`} alt={block.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                        <img src={`${API_BASE}${block.icon}`} alt={block.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
                       ) : (
                         <div className="text-6xl drop-shadow-xl transition-transform duration-500 group-hover:scale-110">{block.icon}</div>
                       )}
