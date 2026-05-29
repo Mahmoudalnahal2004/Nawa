@@ -168,7 +168,7 @@ async def sync_profile(
                     
             user = User(
                 email=email,
-                hashed_password=None, # password is managed by Supabase
+                hashed_password="", # password is managed by Supabase (empty string to avoid SQLite NOT NULL constraint failures)
                 supabase_user_id=supabase_user_id,
                 full_name=data.full_name,
                 role=role,
