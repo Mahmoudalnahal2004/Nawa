@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
-import api from '@/lib/api';
+import api, { API_BASE } from '@/lib/api';
 import { toast } from 'sonner';
 import { Loader2, ArrowLeft, CheckCircle2, ChevronLeft, ChevronRight, LayoutTemplate, Filter, ChevronDown, ChevronRight as ChevronRightIcon, Search, XCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -278,7 +278,7 @@ export default function IncorrectReviewPage() {
 
                 {q.image_url && (
                   <div className="mb-6 rounded-xl overflow-hidden border border-white/10 bg-black/40">
-                    <img src={`${process.env.NEXT_PUBLIC_API_URL}${q.image_url}`} alt="Question visual" className="w-full max-h-96 object-contain" />
+                    <img src={`${API_BASE}${q.image_url}`} alt="Question visual" className="w-full max-h-96 object-contain" />
                   </div>
                 )}
 

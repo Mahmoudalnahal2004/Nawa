@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import api from '@/lib/api';
+import api, { API_BASE } from '@/lib/api';
 import { toast } from 'sonner';
 import { Loader2, BookOpen, Trash2, UploadCloud, FileText } from 'lucide-react';
 
@@ -245,7 +245,7 @@ export default function AdminMaterialsPage() {
                           </div>
                           <div>
                             <p className="text-sm font-medium text-white">{mat.title}</p>
-                            <a href={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}${mat.file_url}`} target="_blank" rel="noreferrer" className="text-xs text-blue-400 hover:underline">
+                            <a href={`${API_BASE}${mat.file_url}`} target="_blank" rel="noreferrer" className="text-xs text-blue-400 hover:underline">
                               View PDF
                             </a>
                           </div>
